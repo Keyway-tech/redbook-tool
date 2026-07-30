@@ -1,5 +1,14 @@
 # redbook-post-gen
 
+简体中文
+
+> 面向小红书创作者的自包含 AI 图文帖生成 skill。把选题、文案与轮播图交给 Agent，获得可直接发布的下一步。
+
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![License](https://img.shields.io/badge/license-CC%20BY--NC%204.0-green)
+
+支持：豆包、WorkBuddy、Claude Code、Codex，以及其他支持 Skills 的 Agent。
+
 ## 功能介绍
 
 - 自包含的小红书（Rednote）图文帖生成 skill。
@@ -36,7 +45,11 @@
 
 ## 开源协议
 
-- 本项目以**开源**方式发布。
+本项目采用 [Creative Commons Attribution-NonCommercial 4.0 International License](https://creativecommons.org/licenses/by-nc/4.0/)（CC BY-NC 4.0）发布：
+
+- **开源**：允许非商业性的学习、研究、个人使用。
 - **禁止商用**：未经授权不得用于任何商业目的。
 - **搬运必须注明出处**：任何形式的复制、转发、二次发布或衍生，均须清晰标注来源 `Keyway-tech/redbook-post-gen`，并保留本声明。
 - 各依赖组件保留其各自的原始许可（如 `guizang-social-card-skill` 的 ISC），使用时须一并遵守。
+
+完整协议文本见 [LICENSE](./LICENSE) 文件。
