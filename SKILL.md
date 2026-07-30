@@ -16,6 +16,12 @@ description: 自包含小红书图文帖生成器。全部依赖 skill/模板/�
 - 自检同时校验打包完整性：确认 `skills/` 下九个依赖目录及其 SKILL.md 均存在（dbs-goal、dbs-content、dbs-deconstruct、dbs-xhs-title、dbs-hook、xhs-copywriter、dbs-resonate、dbs-ai-check、guizang-social-card-skill）；任一缺失即依赖损坏，中止
 - 更新失败 / 本地有未提交改动 / 无法连接远程 / 打包不完整 → 立即中止，报告原因。**禁止用过期或残缺版本继续**
 - 远程存在更新 → 合并到最新后再继续（更新会同步刷新 skills/ 内打包的依赖）
+- **两级更新检测（强制，优先执行）**：若存在 `<SKILL_REPO_DIR>/.local/check_updates.py`，用受管 Python 运行之（`python .local/check_updates.py`），替代上述手工比对：
+  - 第一级：检测本 skill 自身是否有更新（git fetch 比对，git 不可用时自动回退 GitHub API 比对）。
+  - 第二级：逐个检测 `.local/deps.json` 中各依赖 skill 的上游是否有更新（dbs 系列 → `dontbesilent2025/dbskill` 对应子路径；guizang → `op7418/guizang-social-card-skill`；xhs-copywriter → 本仓库子路径）。
+  - 退出码 0 → 继续执行；退出码 10 → 向用户**明确提示**哪些模块有更新并停下等待确认：自身更新经确认后执行 `--apply-self`；某依赖更新经确认后执行 `--apply --only <依赖名>`，仅替换该依赖的 `skills/<名>` 目录（保留 node_modules），不影响其他模块。
+  - 仓库地址与版本基线持久化于 `.local/deps.json`（脚本自动回写）；检测日志追加于 `.local/update_check.log`。二者均在 `.local/` 内，不污染仓库树。
+  - `.local/` 缺失（如新机器首次运行）→ 回退上述手工 git/WebFetch 比对，并提示可从维护者处获取检测脚本。
 
 # 环境自检（次步，强制，任一失败即中止）
 
