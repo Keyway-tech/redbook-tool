@@ -1,0 +1,26 @@
+# 运行期私有配置（落盘目录记忆等），禁止上传
+.local/
+
+# 默认落盘产物目录（成稿/图片），禁止上传
+output/
+
+# 渲染与运行中间产物
+temp/
+tmp/
+*.tmp
+*.log
+render-*.html
+screenshot-*.png
+
+# guizang 默认本地任务目录及其他可能落于仓库根的临时产物（禁止上传）
+local-tests/
+social-card-*/
+livephoto-*/
+wechat-*/
+
+# 依赖安装产物
+node_modules/
+
+# 系统文件
+.DS_Store
+Thumbs.db
