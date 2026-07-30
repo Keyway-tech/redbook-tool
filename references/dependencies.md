@@ -142,9 +142,9 @@
 
 ## 版本自检与打包完整性实施细则
 
-- **仓库**：`https://github.com/Keyway-tech/redbook-tool.git`（分支 main）。`<SKILL_REPO_DIR>` = 本项目 SKILL.md 所在目录，运行时解析。
+- **仓库**：`https://github.com/Keyway-tech/redbook-post-gen.git`（分支 main）。`<SKILL_REPO_DIR>` = 本项目 SKILL.md 所在目录，运行时解析。
 - **执行**：`git -C <SKILL_REPO_DIR> pull --ff-only`。仅快进合并，不重写历史；合并会同步刷新 `skills/` 内打包的依赖。
-- **无 Git / 无远端兜底**：WebFetch `https://raw.githubusercontent.com/Keyway-tech/redbook-tool/main/SKILL.md`，与本地逐行比对；发现差异即判定过期并中止。
+- **无 Git / 无远端兜底**：WebFetch `https://raw.githubusercontent.com/Keyway-tech/redbook-post-gen/main/SKILL.md`，与本地逐行比对；发现差异即判定过期并中止。
 - **打包完整性校验**（每次执行首步一并完成）：确认以下九处均存在，否则按依赖失败中止：
   - `skills/dbs-goal/SKILL.md`
   - `skills/dbs-content/SKILL.md`

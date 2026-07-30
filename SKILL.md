@@ -9,10 +9,10 @@ description: 自包含小红书图文帖生成器。全部依赖 skill/模板/�
 
 # 版本自检（首步，强制）
 
-- 记录仓库：`https://github.com/Keyway-tech/redbook-tool.git`
+- 记录仓库：`https://github.com/Keyway-tech/redbook-post-gen.git`
 - `<SKILL_REPO_DIR>` = 本 SKILL.md 所在目录（运行时解析，禁止硬编码绝对路径）
 - 更新命令：`git -C <SKILL_REPO_DIR> pull --ff-only`
-- Git 不可用或无远端时：用 WebFetch 拉取 `https://raw.githubusercontent.com/Keyway-tech/redbook-tool/main/SKILL.md` 与本地逐行比对；不一致即过期
+- Git 不可用或无远端时：用 WebFetch 拉取 `https://raw.githubusercontent.com/Keyway-tech/redbook-post-gen/main/SKILL.md` 与本地逐行比对；不一致即过期
 - 自检同时校验打包完整性：确认 `skills/` 下九个依赖目录及其 SKILL.md 均存在（dbs-goal、dbs-content、dbs-deconstruct、dbs-xhs-title、dbs-hook、xhs-copywriter、dbs-resonate、dbs-ai-check、guizang-social-card-skill）；任一缺失即依赖损坏，中止
 - 更新失败 / 本地有未提交改动 / 无法连接远程 / 打包不完整 → 立即中止，报告原因。**禁止用过期或残缺版本继续**
 - 远程存在更新 → 合并到最新后再继续（更新会同步刷新 skills/ 内打包的依赖）
