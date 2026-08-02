@@ -1,6 +1,6 @@
 ---
 name: redbook-post-gen
-description: 小红书图文帖生成器。主 skill 只负责流程控制、信息传递与最终结果输出；热搜词采集、选题与写稿方向诊断、钩子生成、实证检索、写稿、审稿、出图全部由安装在本机 agent skills 目录（~/.workbuddy/skills/）的依赖 skill 按其内部规范完成。每次任务开始前强制完整环境检测：依赖缺失自动安装到全局 skills 目录、过期自动更新、解析位置记录到 .deps-cache/deps.json；主机运行时（Node.js 等）缺失自动安装到本机全局目录并自动更新。流程：信息收集 → 热搜词 → 选题/写稿方向/钩子 → 用户三点确认 → 实证检索 → 写稿 → 审稿循环 → 用户确认循环 → 出图 → 落盘。
+description: 小红书图文帖生成器。主 skill 只负责流程控制、信息传递与最终结果输出；热搜词采集、选题与写稿方向诊断、钩子生成、实证检索、写稿、审稿、出图全部由安装在本机 agent skills 目录（~/.workbuddy/skills/）的依赖 skill 按其内部规范完成。每次任务开始前强制完整环境检测：依赖缺失自动安装到全局 skills 目录、过期自动更新、解析位置记录到 .deps-cache/deps.json；主机运行时（Node.js 等）缺失自动安装到本机全局目录并自动更新。流程：信息收集 → 热搜词 → 选题/写稿方向/钩子 → 用户三点确认 → 实证检索 → 标题(dbs-xhs-title)用户确认 → 写稿与逐图文案(content-deai-engine) → 审稿循环(dbs-resonate 共鸣 + no-ai-slop 去 AI 味) → 用户确认 → 出图(guizang) → 落盘。
 ---
 
 # 职责边界（总纲，强制）
@@ -9,7 +9,7 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 
 - 主 skill 禁止亲自产出任何专业内容：选题诊断、写稿方向、钩子、检索聚合、文案、审稿结论、图片，一律由对应依赖 skill 按其内部流程产出。
 - 主 skill 基于上一步的输出整理成下一步需要的输入并传递；严格按 14 步顺序执行，禁止跳步、乱序。
-- 调用任一依赖时，读取其 SKILL.md 并完整遵循其内部流程与规范，不裁剪、不改写其决策逻辑。
+- **子 skill 决策优先（强制）**：调用任一依赖时，读取其 SKILL.md 并完整遵循其内部流程与规范；**以该子 skill 的内部决策为主**，主 skill 不在子 skill 介入执行时做干预——不裁剪、不改写其判断逻辑，不替代其下结论，不自行补采子 skill 本应自行决定的信息（如署名、版式）。主 skill 的角色仅限四步：① 把上一步信息整理为子 skill 所需输入 → ② 启动并让其按自身规范执行 → ③ 原样接收其输出 → ④ 传递给下一步或交用户确认。
 
 # 提问规范（全局，强制，适用于所有需要用户输入的环节）
 
@@ -30,9 +30,11 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 | xiaohongshu-keyword-collector | 热搜词采集（步骤 3） | `~/.workbuddy/skills/xiaohongshu-keyword-collector` | `openlark/skills` 子路径 `skills/xiaohongshu-keyword-collector`（免费、无 API、浏览器自动化） |
 | dbs-content | 选题梳理与写稿方向诊断（步骤 4） | `~/.workbuddy/skills/dbs-content` | `dontbesilent2025/dbskill` 对应子路径 |
 | dbs-hook | 钩子生成（步骤 4） | `~/.workbuddy/skills/dbs-hook` | `dontbesilent2025/dbskill` 对应子路径 |
+| dbs-xhs-title | 标题撰写与确认（步骤 9） | `~/.workbuddy/skills/dbs-xhs-title` | `dontbesilent2025/dbskill` 对应子路径 |
 | multi-search-engine | 实证数据检索（步骤 8） | `~/.workbuddy/skills/multi-search-engine` | 本机已装，无自动安装来源 |
-| content-deai-engine | 写稿与修订（步骤 9、10、12） | `~/.workbuddy/skills/content-deai-engine` | `lanyasheng/content-deai-engine` |
-| dbs-resonate | 审稿（步骤 10、12） | `~/.workbuddy/skills/dbs-resonate` | `dontbesilent2025/dbskill` 对应子路径 |
+| content-deai-engine | 写稿与逐图文案（步骤 10、12） | `~/.workbuddy/skills/content-deai-engine` | `lanyasheng/content-deai-engine` |
+| dbs-resonate | 共鸣审稿（步骤 11、12） | `~/.workbuddy/skills/dbs-resonate` | `dontbesilent2025/dbskill` 对应子路径 |
+| no-ai-slop | 去 AI 味（步骤 11） | `~/.workbuddy/skills/no-ai-slop` | `petergyang/no-ai-slop` |
 | guizang-social-card-skill | 图文卡出图（步骤 13） | `~/.workbuddy/skills/guizang-social-card-skill` | `op7418/guizang-social-card-skill` |
 
 执行机制：运行 `<SKILL_REPO_DIR>/.deps-cache/ensure_deps.sh`（bash）。脚本对依赖表逐项执行：
@@ -59,6 +61,8 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 
 # 流程（14 步，严格顺序，禁止跳步）
 
+> **子 skill 决策优先贯穿全程（强制）**：下列每一步凡调用依赖 skill（步骤 3 / 4 / 8 / 9 / 10 / 11 / 13），均以该子 skill 的内部决策为主；主 skill 不在子 skill 介入执行时做干预，只传递信息、控制流程、接收结果。具体边界见「职责边界 · 子 skill 决策优先」与「内层自治」，违例见文末「禁令」。
+
 ## 步骤 1：接收用户输入
 
 用户提供基础选题思路（必填）与配图（可选）。主 skill 原样记录，不加工、不润色。
@@ -73,7 +77,7 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 
 ## 步骤 3：热搜词采集（xiaohongshu-keyword-collector）
 
-- 主 skill 以「选题思路 + 人群画像 + 图文贴目的」提炼 1–3 个种子词传入，按该 skill 的 Workflow 执行（打开 explore → 输入种子词不提交 → 采集搜索联想下拉）。
+- 主 skill 以「选题思路 + 人群画像 + 图文贴目的」提炼 1–3 个种子词传入，按该 skill 的 Workflow 执行（打开 explore → 输入种子词不提交 → 采集搜索联想下拉）。采集与抓取的具体执行由该 skill 内部决定，主 skill 不干预其流程与去重判定，仅传入种子词、接收结果。
 - 接收联想词列表后，主 skill 按与选题思路的相关度筛选 **5–10 个最贴近的搜索关键词**，写入信息包。
 - 采集结果不足 5 个时，调整种子词再采一轮；仍不足则如实记录实际数量继续，**禁止编造热词凑数、禁止用非小红书来源词冒充热搜词**。
 
@@ -83,6 +87,8 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 
 1. **dbs-content**（选题与写稿方向）：按其 Phase 1→4 标准流程执行（接收内容 → 形式匹配 → 五维诊断 → 诊断报告），目标形式固定为「小红书图文」，产出 **3–5 个选题**及各自**写稿方向**（切入角度、内容结构、第一步行动）。
 2. **dbs-hook**（钩子）：把同一信息包与 dbs-content 的选题/方向结论作为素材传入，按其「话题 + Hook + 可信度」公式与 Phase 4 三方法（素材提取 / 素材增补 / 悬念制造）产出钩子候选（10–15 条，含 Top3 推荐）。若其按 Phase 2 判定素材不足而停止优化，主 skill 把停止结论原样转达用户并回到步骤 2 补充素材，**禁止强迫其生成**。
+
+选题、写稿方向、钩子的具体结论由 dbs-content / dbs-hook 内部决策，主 skill 不干预、不替代其下判断（仅做下方跨步一致性自检）。
 
 一致性闸门（强制）：主 skill 呈现给用户前自检——选题须源自用户思路与热搜词，写稿方向须落在对应选题上，钩子须服务所选选题+方向；三者强相关且不跑题方可呈现，否则退回对应依赖重产并说明退回原因。
 
@@ -103,39 +109,61 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 ## 步骤 8：实证数据检索（multi-search-engine）
 
 - 主 skill 分析「已确认选题 + 行文方向 + 钩子 + 人群画像 + 目的」，列出需要检索的实证清单：支撑论据的**真实数据（须标注来源）**、公开发布的观点信息、权威信息（官方发布 / 学术 / 行业报告）等一切有利于行文的信息。
-- 调用 multi-search-engine 按其 Workflow（语言评估 → 受控检索 → 结果聚合）执行，接收**带来源链接**的检索报告，写入信息包。
+- 调用 multi-search-engine 按其 Workflow（语言评估 → 受控检索 → 结果聚合）执行，接收**带来源链接**的检索报告，写入信息包。检索策略与结果聚合由该 skill 内部决定，主 skill 不干预。
 - 分析结论为「无需检索」时，记录理由后直接进入步骤 9；需要检索而该依赖不可用 → 按依赖失败处理中止。
 - 禁止把未经验证的来源当事实写入信息包；检索不到的信息标注「待核实」。
 
-## 步骤 9：初稿撰写（content-deai-engine）
+## 步骤 9：标题撰写与确认（dbs-xhs-title）
 
-主 skill 组装完整信息包传入：选题思路、人群画像、图文贴目的、热搜词（5–10 个）、已确认选题、已确认行文方向、已确认钩子、实证检索报告（带来源）、用户配图（如有）、目标平台=小红书、时间窗=当前、素材来源标注。
+主 skill 组装标题输入信息包：已确认选题、行文方向、已确认钩子、热搜词（5–10 个）、人群画像、图文贴目的，以及 `config.md` 封面主标题约束（4–14 字、须含钩子 / 痛点、结构化呈现、禁生硬口号）。
 
-- 按其完整流程执行：先决条件 → AI 味诊断 → 四步重写 → 平台适配（小红书：痛点场景 → 亲历细节 → 3 步做法 → 互动提问）→ 标准输出（标题候选 / 正文 / 评论区首评 / 标签建议 / 发布前风险提示）→ 质量门禁 → 三角色自检。
-- 主 skill 接收标准输出；最终标题从其标题候选中结合已确认选题锁定，随步骤 11 一并由用户确认。
-- 约束传入：热搜词须自然融入正文（≥2–3 个），不得堆砌罗列；数据与观点须对应检索报告来源，禁止臆造；无法验证的信息标注「待核实」。
+- 传入 `dbs-xhs-title`，由其按小红书标题公式产出标题候选（含 Top 推荐）；主 skill 不干预其公式选择与排序。
+- **用户确认循环（提问规范：一题、编号选项）**：「标题确认：1. 通过（采用当前选定标题） 2. 重选（请指方向或更换风格）」。循环至用户确认 OK；每次重选把用户反馈原样转交 dbs-xhs-title 重产，主 skill 不自行拟定或改写标题。
+- 确认的标题作为**固定值**记录，供步骤 10 封面标题槽使用；标题须与已确认钩子、选题 + 方向呼应。
 
-## 步骤 10：审稿循环（dbs-resonate 审、content-deai-engine 改，主 skill 控制）
+## 步骤 10：正文初稿与逐图文案（content-deai-engine）
 
-1. 主 skill 把当前稿交 **dbs-resonate**，按其 Step 1→4 执行（提取主张 → 核心机制审查 → 五维度共鸣诊断 → 诊断报告）。
-2. 其报告中的【具体改法】（删掉 / 缩短为支撑细节 / 强化 / 保持不动 + 改完后的骨架）即为**修改方向**，主 skill 原样转交 **content-deai-engine**，按其修订模式（四步重写 / 快速调用模式）落实一轮修订。**禁止主 skill 自行改稿，禁止写稿 skill 不按修改方向修改。**
-3. 修订稿再交 dbs-resonate 复审；如此循环，直至其五维诊断全部有效、无删除/强化建议（即**放行**）。
+主 skill 组装完整信息包传入 content-deai-engine：选题思路、人群画像、图文贴目的、热搜词、已确认选题、已确认行文方向、已确认钩子、步骤 9 确认标题（固定值，封面标题槽必须一致）、实证检索报告（带来源）、用户配图（如有）、目标平台=小红书、素材来源标注。
+
+在传入信息包中**显式追加小红书图文贴结构与出图要求（属信息传递，非主 skill 自行写稿）**，要求 content-deai-engine 在标准流程之外额外完成三项：
+
+1. **图片结构规划（由写稿 skill 决策，主 skill 不代定）**：结合本主题与小红书图文贴风格，分析并给出最佳图片数量与每图角色，固定骨架为——① 1 张封面（步骤 9 确认标题 + 钩子 + 配图说明）② 1 张开篇要点提炼 / 目录·总结 ③ n 张正文（逐字）④ 1 张末尾获客钩子（CTA）。n 的具体取值与每页切分点由 content-deai-engine 按正文量决定。
+2. **逐图文案（图即文案，逐字不提炼）**：按上述骨架，为**每一张图**写出其上承载的**完整文字**——封面写标题（=步骤 9 确认值）+ 钩子句；开篇提炼 / 目录写本帖脉络（须与后续正文页逐页对应、数量一致，不得出现正文没有的要点，行文自然不生硬）；正文页逐字复制对应段落（不改写为分点、不丢字）；末尾钩子写获客 CTA。
+3. **完整文字稿 + 逐图文案块**：标准输出（正文 / 评论区首评 / 标签建议 / 发布前风险提示）照常产出，并额外输出一份「逐图文案」结构化块——按图编号（封面 / 目录 / 正文①…正文n / 末尾钩子）列出每张图的完整文字内容，供步骤 13 出图直接采用。
+
+- **字数约束声明（强制，来自 `config.md`，主 skill 调用写稿子 skill 前必读并原样转达）**：`config.md` 已按 guizang 画布（1080×1440、内边距 96/88）与固定字号（正文 28px）预先算定每页字符上下限。主 skill 必须把以下约束作为信息传递写进 content-deai-engine 的输入，**不得由主 skill 自行重算或改写数值**：
+  - **每正文页**：648–864 字（下限 648 满足 guizang R5 密度 ≥75%，上限 864 为满版不溢出）；逐字不提炼、图即文案；低于 648 视为密度不足须补足，高于 864 须确认不溢出 guizang R1。
+  - **开篇要点提炼 / 目录**：条目须与正文页逐页对应、数量一致，不得出现正文没有的要点。
+  - （封面主标题约束 4–14 字已在步骤 9 由 dbs-xhs-title 落实，本步骤封面标题槽须等于该确认值。）
+- 执行：content-deai-engine 按自身流程落实；正文、标签、**图片结构、逐图文案、目录与获客钩子文案**均由 content-deai-engine 内部决策与撰写，主 skill 不干预、不替代其判断、不自行撰写或补写任何文案（含目录与每图内容）。
+- 主 skill 接收标准输出 + 逐图文案块；核对封面标题槽 = 步骤 9 确认值，不一致退回 content-deai-engine 修正。
+- 约束传入：热搜词须自然融入正文（≥2–3 个）；数据与观点须对应检索报告来源，禁止臆造；无法验证信息标注「待核实」；开篇提炼 / 目录须与正文页严格同源对应（杜绝目录与正文脱节、数量不一致）。
+
+## 步骤 11：审稿循环（dbs-resonate 共鸣诊断 + no-ai-slop 去 AI 味，主 skill 控制）
+
+循环目标：dbs-resonate（共鸣）与 no-ai-slop（去 AI 味）**两者均认可**方退出；任一不认可则按其修改方向落实一轮后复审。
+
+1. **dbs-resonate 共鸣诊断**：主 skill 把当前稿交 dbs-resonate，按其 Step 1→4 执行（提取主张 → 核心机制审查 → 五维度共鸣诊断 → 诊断报告）。其【具体改法】即为**修改方向**，主 skill 原样转交 content-deai-engine 落实一轮修订。**dbs-resonate 仅负责共鸣 / 传播诊断，不负责去 AI 味（去 AI 味由 no-ai-slop 专责）。**
+2. **no-ai-slop 去 AI 味**：同一轮修订后，主 skill 把稿交 no-ai-slop，按其行为准则重写去除 AI 味；接收其去 AI 味稿（或「无 AI 味」通过结论）。若判定仍有 AI 味，其重写稿即修改方向，主 skill 原样转交 content-deai-engine 吸收融合到稿中（含同步更新「逐图文案」块）。
+3. 修订 / 去味稿再交 dbs-resonate 复审 → 复审后再交 no-ai-slop；如此循环，直至 dbs-resonate 五维全有效、无删除 / 强化建议（共鸣达标）**且** no-ai-slop 判定无 AI 味（去味达标）。
 4. 同一修改方向连续两轮未获放行 → 主 skill 停止循环，向用户报告阻塞点与双方结论，由用户裁决。
+5. 禁止主 skill 自行改稿；修改方向必须来自 dbs-resonate 或 no-ai-slop 报告，改稿 / 吸收必须经 content-deai-engine 落实。
 
-## 步骤 11：最终稿用户确认
+## 步骤 12：用户最终确认（循环至通过）
 
-向用户输出最终稿全文（标题 + 正文 + 评论区首评 + 标签建议 + 来源标注），按提问规范问一个确认问题：「最终稿确认：1. 通过 2. 需修改（请指出修改方向）」。
+向用户输出终稿全文（步骤 9 确认标题 + 正文 + 逐图文案结构 + 评论区首评 + 标签建议 + 来源标注），按提问规范问一题：「最终稿确认：1. 通过 2. 需修改（指出方向）」。
 
-## 步骤 12：循环至用户通过
-
-用户提出修改 → 主 skill 把用户修改方向并入步骤 10 的循环（content-deai-engine 改、dbs-resonate 审），修订稿再回到步骤 11 请用户确认；重复直至用户确认通过。
+用户提出修改 → 主 skill 把用户修改方向并入步骤 11 的循环（content-deai-engine 改、dbs-resonate 审共鸣、no-ai-slop 去 AI 味），修订稿再回到本步骤请用户确认；重复直至用户确认通过。
 
 ## 步骤 13：图文贴生成（guizang-social-card-skill）
 
-- 主 skill 先按提问规范问风格（一次一题）：「图文贴风格选择：1. Editorial Magazine × E-ink（电子杂志 · 图文混排） 2. Swiss International（瑞士国际主义）」；选定后再问主题色（Editorial：Ink Classic / Indigo Porcelain / Forest Ink / Kraft Paper / Dune / Midnight Ink；Swiss：IKB Blue / Lemon Yellow / Lemon Green / Safety Orange；编号列出）。
-- 配图：用户已提供 → 作为素材传入；未提供 → 按其内层流程向用户一问（自备照片 / 网络取图 / AI 生成），主 skill 把该问原样转达为编号选项，禁止代答。
-- 主 skill 把落盘子目录 `<落盘根目录>/output/<最终标题_YYYYMMDD>` 作为其 task folder **显式传入**（覆盖其默认 `local-tests/<slug>/`），使渲染产物直接落入已隔离的输出目录。
-- 按其 Intake → Extract Story → Choose Style Mode → Plan Pages → Build & Render → Image/Screenshot Handling → Deliver 全链路执行；小红书 3:4（1080×1440）轮播卡，页数、排版、字号层级、QA 均遵循其规范。
+- 主 skill 先按提问规范问风格（一次一题）：「图文贴风格选择：1. Editorial Magazine × E-ink（电子杂志 · 图文混排） 2. Swiss International（瑞士国际主义）」；选定后再问主题色（Editorial：Ink Classic / Indigo Porcelain / Forest Ink / Kraft Paper / Dune / Midnight Ink；Swiss：IKB Blue / Lemon Yellow / Lemon Green / Safety Orange；编号列出）。风格与主题色仅影响 guizang 的视觉版式，不改变文案内容。
+- 配图：用户已提供 → 作为素材传入；未提供 → 按 guizang 内层流程向用户一问（自备照片 / 网络取图 / AI 生成），主 skill 把该问原样转达为编号选项，禁止代答。
+- 主 skill 把落盘子目录 `<落盘根目录>/output/<最终标题_YYYYMMDD>` 作为 guizang 的 task folder **显式传入**（覆盖其默认 `local-tests/<slug>/`），使渲染产物直接落入输出目录。
+- **逐图文案传递（来自步骤 10 的 content-deai-engine 输出）**：主 skill 把步骤 10 产出的「逐图文案」结构化块**原样**传给 guizang，作为出图的内容素材。每张图承载的完整文字、封面 / 目录 / 正文 / 末尾钩子的角色划分、图片数量与切分，**已由 content-deai-engine 在步骤 10 决定**，主 skill 不重新切分、不改写、不补写、不代定结构。（该逐图文案已在步骤 10 受 `config.md` 字数约束——封面标题 4–14 字由步骤 9 落实、正文页 648–864 字；密度与字号交由 guizang 按其规范执行，主 skill 不重算。）
+- 按其 Intake → Extract Story → Choose Style Mode → Plan Pages → Build & Render → Image/Screenshot Handling → Deliver 全链路执行；小红书 3:4（1080×1440）轮播卡，视觉版式（字号层级、留白、配图位置、recipe 选择、密度处理）由 guizang 按其规范与内容规划决定，主 skill 不干预。
+- **正文完整还原规则（强制，覆盖 guizang 默认压缩）**：guizang 的 `content-planning.md` 默认采用 Compression Ladder 并明写 "Do not put the full article on images"——**本流程不适用该默认**。主 skill 在 Intake 明确指令：每张卡片须承载步骤 10 逐图文案中的**完整逐字文字**，禁止提炼为分点 / 金句 / 清单后出图（即"图即文案"）。封面承载标题 + 钩子，目录 / 总结卡承载 content-deai-engine 已写好的脉络文字，正文页承载逐字段落，末尾钩子卡承载获客 CTA 文案。
+- **主 skill 不向卡片注入自定义设计元素（强制）**：署名（byline）、刊头文案、自定义版式、自定义配图说明等一律由 guizang 按其规范决定；出图全权交 guizang，主 skill 不自行写入需用户补充的占位、不干预其版式与署名决策。主 skill 仅传入逐图文案、配图、风格与主题色，其余交给 guizang。**注：传入 content-deai-engine 已产出的逐图文案（含封面 / 目录 / 正文 / 末尾钩子角色划分）属信息传递，不属本禁令所指的设计注入。**
 - 类目落在其能力边界外被拒单 → 按依赖失败处理中止，禁止回退默认方案。
 
 ## 步骤 14：落盘
@@ -154,8 +182,8 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 
 # 内层自治（强制）
 
-- 调用任一依赖，完整遵循其 SKILL.md 规范流程，不裁剪、不改写其决策逻辑。
-- 主 skill 仅负责外层编排、信息收集与传递、接收依赖返回与最终落盘；禁止在主 skill 内重写依赖职责（自行写稿、自行审稿、自行出图、自行诊断、自行检索聚合）。
+- 调用任一依赖，完整遵循其 SKILL.md 规范流程；**以子 skill 内部决策为主，主 skill 不在其介入执行时做干预**（详见「职责边界 · 子 skill 决策优先」）。
+- 主 skill 仅负责外层编排、信息收集与传递、接收依赖返回与最终落盘；禁止在主 skill 内重写依赖职责（自行写稿、自行审稿、自行出图、自行诊断、自行检索聚合、自行改稿、自行决定版式/署名）。（dbs-resonate 仅做共鸣 / 传播诊断，去 AI 味由 no-ai-slop 专责，主 skill 不把去 AI 味职责推给 dbs-resonate 或自行去味）。
 - 各 dbs 子 skill 内部的 `/dbs*` 路由导航仅作原始形态保留，本流程已由主 skill 接管全部路由，不得令流程脱离主编排。
 
 # 禁令
@@ -167,4 +195,8 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 - ❌ 禁止编造热搜词、数据、来源；未验证信息必须标注「待核实」。
 - ❌ 禁止审稿循环中主 skill 自行改稿；修改方向必须来自 dbs-resonate 报告，改稿必须经 content-deai-engine 落实。
 - ❌ 禁止交互式弹窗提问；禁止一次多问；禁止提问时输出与问题无关的信息。
+- ❌ 禁止在子 skill 介入执行时干预其决策；子 skill 的内部判断与结论为主，主 skill 仅传递信息、控制流程、接收结果（详见「职责边界 · 子 skill 决策优先」）。
+- ❌ 禁止主 skill 向卡片注入自定义设计元素（署名 / byline / 刊头文案 / 自定义版式 / 自定义配图说明等）；出图全权交 guizang，主 skill 不自行写入需用户补充的占位、不干预其署名与版式决策、**不代定图片结构与每图文案**。**传入 content-deai-engine 已产出的「逐图文案」（含封面 / 目录 / 正文 / 末尾钩子角色划分）属信息传递，不属本禁令的设计注入。**
+- ❌ 禁止把去 AI 味职责交给 dbs-resonate（或主 skill 自行去味）；去 AI 味由 no-ai-slop 在步骤 11 审稿循环中专责，dbs-resonate 仅做共鸣 / 传播诊断。
+
 - ❌ 禁止未经用户确认落盘目录即落盘；禁止把运行记忆（.deps-cache/）与产物（output/）提交或推送到 GitHub。

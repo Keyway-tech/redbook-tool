@@ -2,16 +2,18 @@
 
 本 skill **不自带依赖副本**：所有依赖 skill 安装在本机 agent skills 目录 `~/.workbuddy/skills/<name>/`，由 `.deps-cache/ensure_deps.sh` 检查 / 安装 / 更新并把解析路径写入 `.deps-cache/deps.json`。主 skill 调用任一依赖时，读取 `.deps-cache/deps.json` 记录（缺省 `~/.workbuddy/skills/<name>/SKILL.md`）并完整遵循其规范流程，不裁剪其决策逻辑。主 skill 仅负责流程控制、信息传递与最终结果输出；本文件规定「传什么、收什么、哪些点主 skill 不得插手」。所有相对路径均以各依赖自身目录 `~/.workbuddy/skills/<name>/` 为基准。
 
-依赖总表（7 个，与 SKILL.md「环境检测」、`.deps-cache/ensure_deps.sh` 三处一致）：
+依赖总表（9 个，与 SKILL.md「环境检测」、`.deps-cache/ensure_deps.sh` 三处一致）：
 
 | 依赖 | 用途（流程步骤） | 缺失时安装来源 |
 |---|---|---|
 | xiaohongshu-keyword-collector | 热搜词采集（步骤 3） | `openlark/skills` 子路径 `skills/xiaohongshu-keyword-collector` |
 | dbs-content | 选题梳理与写稿方向诊断（步骤 4） | `dontbesilent2025/dbskill` 对应子路径 |
 | dbs-hook | 钩子生成（步骤 4） | `dontbesilent2025/dbskill` 对应子路径 |
+| dbs-xhs-title | 标题撰写与确认（步骤 9） | `dontbesilent2025/dbskill` 对应子路径 |
 | multi-search-engine | 实证数据检索（步骤 8） | 本机已装，无自动安装来源 |
-| content-deai-engine | 写稿与修订（步骤 9、10、12） | `lanyasheng/content-deai-engine` |
-| dbs-resonate | 审稿（步骤 10、12） | `dontbesilent2025/dbskill` 对应子路径 |
+| content-deai-engine | 写稿与逐图文案（步骤 10、12） | `lanyasheng/content-deai-engine` |
+| dbs-resonate | 共鸣审稿（步骤 11、12） | `dontbesilent2025/dbskill` 对应子路径 |
+| no-ai-slop | 去 AI 味（步骤 11） | `petergyang/no-ai-slop` |
 | guizang-social-card-skill | 图文卡出图（步骤 13） | `op7418/guizang-social-card-skill` |
 
 ---
@@ -52,6 +54,17 @@
 
 ---
 
+## 3.1 dbs-xhs-title（标题撰写与确认，步骤 9）
+
+- **路径**：`~/.workbuddy/skills/dbs-xhs-title/SKILL.md`
+- **职责边界**：小红书标题公式专家——从验证过的爆款标题公式中挑对的、用对的、说明为什么用这个。它只产标题，不定选题、不写正文。
+- **传入**：步骤 9 标题输入信息包（已确认选题 / 行文方向 / 已确认钩子 / 热搜词 5–10 / 人群画像 / 图文贴目的 + `config.md` 封面主标题约束 4–14 字）。
+- **完整执行**：读取其 SKILL.md，遵循其标题公式流程产出候选（含 Top 推荐）。主 skill 不干预其公式选择与排序。
+- **主 skill 接收**：标题候选列表 + 推荐；经用户确认循环（步骤 9）采用固定值，供步骤 10 封面标题槽使用。
+- **禁止**：主 skill 自行拟定或改写标题、替用户选定标题。
+
+---
+
 ## 4. multi-search-engine（实证数据检索，步骤 8）
 
 - **路径**：`~/.workbuddy/skills/multi-search-engine/SKILL.md`
@@ -64,27 +77,38 @@
 
 ---
 
-## 5. content-deai-engine（写稿与修订，步骤 9、10、12）
+## 5. content-deai-engine（写稿与逐图文案，步骤 10、12）
 
 - **路径**：`~/.workbuddy/skills/content-deai-engine/SKILL.md`（含 `references/anti-ai-patterns.md`、`platform-templates.md`、`preflight-checklist.md`）
-- **职责边界**：「去 AI 味」初稿生成与修订引擎，自带 AI 味诊断、四步重写、平台适配、质量门禁与三角色自检。**它是生成者，不替代 dbs-resonate 的独立审稿。**
-- **传入（初稿，步骤 9）**：完整信息包——选题思路 + 人群画像 + 图文贴目的 + 热搜词（5–10 个）+ 已确认选题 + 已确认行文方向 + 已确认钩子 + 实证检索报告（带来源）+ 用户配图（如有）+ 目标平台「小红书」+ 时间窗「当前」+ 素材来源标注。明确要求：按小红书平台模板（痛点场景 → 亲历细节 → 3 步做法 → 互动提问）产出；热搜词自然融入正文 ≥2–3 个；数据对应检索报告来源；无法验证的信息标注「待核实」。
+- **职责边界**：「去 AI 味」初稿生成与修订引擎，自带 AI 味诊断、四步重写、平台适配、质量门禁与三角色自检。**它是生成者，不替代 dbs-resonate 的独立审稿与 no-ai-slop 的去 AI 味。** 其内置 AI 味诊断仍运行，但循环内的去 AI 味专责由 no-ai-slop 承担。
+- **传入（初稿，步骤 10）**：完整信息包——选题思路 + 人群画像 + 图文贴目的 + 热搜词（5–10 个）+ 已确认选题 + 已确认行文方向 + 已确认钩子 + 步骤 9 确认标题（固定值，封面标题槽）+ 实证检索报告（带来源）+ 用户配图（如有）+ 目标平台「小红书」+ 素材来源标注。明确要求：按小红书平台模板（痛点场景 → 亲历细节 → 3 步做法 → 互动提问）产出；热搜词自然融入正文 ≥2–3 个；数据对应检索报告来源；无法验证的信息标注「待核实」。
 - **完整执行**：读取其 SKILL.md，遵循其 0) 先决条件 → 1) AI 味诊断 → 2) 四步重写 → 3) 平台适配 → 4) 标准输出 → 5) 质量门禁 → 6) 三角色自检 全流程。不得裁剪其重写与自检逻辑。
-- **主 skill 接收**：标准输出——AI 味诊断 / 标题候选 / 正文 / 评论区首评 / 标签建议 / 发布前风险提示。最终标题从其标题候选中结合已确认选题锁定，随步骤 11 由用户确认。
-- **传入（修订，步骤 10、12）**：dbs-resonate 报告中的【具体改法】原样作为修改方向（或并入用户修改方向），按其修订模式（四步重写 / 快速调用模式）落实一轮。
-- **后续动作（主 skill 职责）**：初稿进入步骤 10 审稿循环；修订稿回 dbs-resonate 复审；用户确认后进入出图。
+- **主 skill 接收**：标准输出——正文 / 评论区首评 / 标签建议 / 发布前风险提示 + 「逐图文案」块。封面标题由步骤 9 确认值固定提供（本步骤封面标题槽须等于该值），随步骤 12 由用户确认。
+- **传入（修订，步骤 11、12）**：dbs-resonate 报告中的【具体改法】与 no-ai-slop 的去 AI 味稿，原样作为修改方向（或并入用户修改方向），按其修订模式（四步重写 / 快速调用模式）落实一轮并吸收去味修改。
+- **后续动作（主 skill 职责）**：初稿进入步骤 11 审稿循环（dbs-resonate 共鸣 + no-ai-slop 去 AI 味）；修订稿回 dbs-resonate 复审 + no-ai-slop 去味；用户确认（步骤 12）后进入出图。
 - **禁止**：主 skill 自行写稿 / 改稿、写稿 skill 不按修改方向修改、臆造细节或来源、终稿不含与选题强相关的热搜词。
 
 ---
 
-## 6. dbs-resonate（审稿，步骤 10、12）
+## 5.1 no-ai-slop（去 AI 味，步骤 11）
+
+- **路径**：`~/.workbuddy/skills/no-ai-slop/SKILL.md`
+- **职责边界**：去 AI 味重写专家——按其行为准则重写文本，去除 AI 生成痕迹，保留作者原意与口语感。**它是去 AI 味专责者，不替代 dbs-resonate 的共鸣诊断，也不替代 content-deai-engine 的写稿。**
+- **传入**：步骤 11 审稿循环中 content-deai-engine 修订后的当前稿。
+- **完整执行**：读取其 SKILL.md，遵循其去 AI 味重写流程（诊断 AI 味 → 按准则重写 → 自检）。主 skill 不干预其去味判断。
+- **主 skill 接收**：去 AI 味稿（或「无 AI 味」通过结论）；判定仍有 AI 味时其重写稿即修改方向，主 skill 原样转交 content-deai-engine 吸收融合。
+- **禁止**：主 skill 自行去味、把去 AI 味职责推给 dbs-resonate。
+
+---
+
+## 6. dbs-resonate（共鸣审稿，步骤 11、12）
 
 - **路径**：`~/.workbuddy/skills/dbs-resonate/SKILL.md`
-- **职责边界**：文稿共鸣诊断——用 5 个传播心理学维度（沉默解除 / 满足动机 / 立场框架 / 传播入口 / 信念结构）诊断文稿能否打中受众，输出具体到文字的改法。**它是诊断者，不重写文稿。**
+- **职责边界**：文稿共鸣诊断——用 5 个传播心理学维度（沉默解除 / 满足动机 / 立场框架 / 传播入口 / 信念结构）诊断文稿能否打中受众，输出具体到文字的改法。**它是诊断者，不重写文稿，不负责去 AI 味（去 AI 味由 no-ai-slop 专责）。**
 - **传入**：content-deai-engine 产出的当前稿（初稿或修订稿全文）。
 - **完整执行**：读取其 SKILL.md，遵循其 Step 1→4（提取所有主张 → 核心机制审查（不可跳过）→ 五维度诊断 → 输出诊断报告）。每条诊断必须关联文稿具体文字，不允许泛泛而谈。不得要求它直接改稿。
 - **主 skill 接收**：诊断报告——核心问题一句话、核心机制审查、五维有效/弱/无效、【具体改法】（删掉 / 缩短为支撑细节 / 强化 / 保持不动 + 改完后的骨架）。
-- **放行标准（主 skill 控制）**：五维全部有效、无删除/强化建议 → 放行，进入步骤 11；否则【具体改法】即为修改方向，原样转交 content-deai-engine 修订后复审。同一修改方向连续两轮未获放行 → 停止循环，报告用户裁决。
+- **放行标准（主 skill 控制，与 no-ai-slop 并联）**：五维全部有效、无删除/强化建议（共鸣达标）**且** no-ai-slop 判定无 AI 味（去味达标）→ 放行，进入步骤 12；否则【具体改法】即为修改方向，原样转交 content-deai-engine 修订（并交 no-ai-slop 去味）后复审。同一修改方向连续两轮未获放行 → 停止循环，报告用户裁决。
 - **后续动作（主 skill 职责）**：向用户展示诊断结论与修订说明（步骤 11 确认时）。
 - **禁止**：主 skill 自行按建议改稿、跳过审稿直接请用户确认、把诊断报告当作终稿。
 
@@ -117,7 +141,7 @@
 |---|---|---|---|
 | `guizang-social-card-skill` | `playwright` | Playwright 模块 + Chromium 二进制 | `~/.workbuddy/skills/guizang-social-card-skill/node_modules/playwright` + `chromium.executablePath()` |
 | `xiaohongshu-keyword-collector` | `playwright` | 同上（浏览器自动化采集小红书联想热词） | 同上（与 guizang 共用同一套 Playwright/Chromium） |
-| 其余依赖（dbs-content / dbs-hook / dbs-resonate / content-deai-engine / multi-search-engine） | （无） | 纯文档/检索类，无额外运行时 | — |
+| 其余依赖（dbs-content / dbs-hook / dbs-xhs-title / dbs-resonate / content-deai-engine / no-ai-slop / multi-search-engine） | （无） | 纯文档/检索类，无额外运行时 | — |
 
 - **新增带深度依赖的 skill 时**：必须在 `ensure_deps.sh` 的 `deep_deps_of()` 中登记其深度依赖键，并提供对应的 `check_<key>` 检查函数（含自修复安装逻辑），否则不被校验。
 - **自修复安装**：`check_playwright` 在模块或 Chromium 缺失时，于 guizang 目录执行 `npm install --no-audit --no-fund playwright` 与 `npx playwright install chromium`；任一失败 → 环境检测中止。

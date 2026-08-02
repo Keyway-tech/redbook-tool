@@ -35,18 +35,21 @@ MAX_RETRY=2             # 克隆、拉取的最大重试次数（含首次）
 #   name|url                       -> 独立仓库，整仓克隆到 ~/.workbuddy/skills/<name>（目标为 git 仓库，可 pull 更新）
 #   name|url|subpath               -> monorepo，克隆一次后复制子路径 subpath（目标非 git 仓库，更新靠重新复制）
 #   name|                          -> 无来源（本机已装），缺失时仅记 missing-optional，不自动克隆
-# dbs 系列（dbs-content 选题与写稿方向 / dbs-hook 钩子 / dbs-resonate 审稿）共享同一 monorepo（dontbesilent2025/dbskill），克隆一次后按名复制子目录。
+# dbs 系列（dbs-content 选题与写稿方向 / dbs-hook 钩子 / dbs-xhs-title 标题 / dbs-resonate 共鸣审稿）共享同一 monorepo（dontbesilent2025/dbskill），克隆一次后按名复制子目录。
 # guizang 为独立仓库，整仓克隆（目标为 git 仓库，保留 node_modules/playwright）。
 # content-deai-engine 为独立仓库（lanyasheng/content-deai-engine），整仓克隆。
 # xiaohongshu-keyword-collector 来自 openlark/skills monorepo 子路径 skills/xiaohongshu-keyword-collector。
 # multi-search-engine 为本机已装的多引擎网页检索聚合 skill（无自动 clone 来源，可选，缺失不阻塞）。
+# no-ai-slop 为独立仓库（petergyang/no-ai-slop），整仓克隆；步骤 11 去 AI 味专责。
 DEPS=(
   "dbs-content|https://github.com/dontbesilent2025/dbskill.git"
   "dbs-hook|https://github.com/dontbesilent2025/dbskill.git"
+  "dbs-xhs-title|https://github.com/dontbesilent2025/dbskill.git"
   "dbs-resonate|https://github.com/dontbesilent2025/dbskill.git"
   "guizang-social-card-skill|https://github.com/op7418/guizang-social-card-skill.git"
   "content-deai-engine|https://github.com/lanyasheng/content-deai-engine.git"
   "xiaohongshu-keyword-collector|https://github.com/openlark/skills.git|skills/xiaohongshu-keyword-collector"
+  "no-ai-slop|https://github.com/petergyang/no-ai-slop.git"
   "multi-search-engine|"
 )
 
