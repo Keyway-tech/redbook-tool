@@ -1,114 +1,170 @@
 ---
 name: redbook-post-gen
-description: 自包含小红书图文帖生成器。全部依赖 skill/模板/脚本已原样打包于本项目 skills/ 内，可独立拷贝到其他电脑运行，不引用宿主机器已安装版本。主 skill 仅负责流程编排、信息收集、信息传递与最终落盘，一切专业产出（目标澄清/角度诊断/概念拆解/标题/钩子/写稿/共鸣诊断/AI检测/出图）均由打包依赖完成。强制版本自检与环境自检；依赖失败即中止、不回退默认；依赖自带默认方案时交互式征求用户。仅编排外层流程，不干预依赖内层逻辑。
+description: 小红书图文帖生成器。主 skill 只负责流程控制、信息传递与最终结果输出；热搜词采集、选题与写稿方向诊断、钩子生成、实证检索、写稿、审稿、出图全部由安装在本机 agent skills 目录（~/.workbuddy/skills/）的依赖 skill 按其内部规范完成。每次任务开始前强制完整环境检测：依赖缺失自动安装到全局 skills 目录、过期自动更新、解析位置记录到 .local/deps.json；主机运行时（Node.js 等）缺失自动安装到本机全局目录并自动更新。流程：信息收集 → 热搜词 → 选题/写稿方向/钩子 → 用户三点确认 → 实证检索 → 写稿 → 审稿循环 → 用户确认循环 → 出图 → 落盘。
 ---
 
 # 职责边界（总纲，强制）
 
-主 skill 只做四件事：**流程编排、信息收集、信息传递、最终落盘**。禁止主 skill 亲自产出任何专业内容（写稿、标题、钩子、诊断、拆解、排版、出图一律由打包依赖完成）。
+主 skill 只做三件事：**流程控制、信息传递、最终结果输出**。
 
-# 版本自检（首步，强制）
+- 主 skill 禁止亲自产出任何专业内容：选题诊断、写稿方向、钩子、检索聚合、文案、审稿结论、图片，一律由对应依赖 skill 按其内部流程产出。
+- 主 skill 基于上一步的输出整理成下一步需要的输入并传递；严格按 14 步顺序执行，禁止跳步、乱序。
+- 调用任一依赖时，读取其 SKILL.md 并完整遵循其内部流程与规范，不裁剪、不改写其决策逻辑。
 
-- 记录仓库：`https://github.com/Keyway-tech/redbook-post-gen.git`
-- `<SKILL_REPO_DIR>` = 本 SKILL.md 所在目录（运行时解析，禁止硬编码绝对路径）
-- 更新命令：`git -C <SKILL_REPO_DIR> pull --ff-only`
-- Git 不可用或无远端时：用 WebFetch 拉取 `https://raw.githubusercontent.com/Keyway-tech/redbook-post-gen/main/SKILL.md` 与本地逐行比对；不一致即过期
-- 自检同时校验打包完整性：确认 `skills/` 下九个依赖目录及其 SKILL.md 均存在（dbs-goal、dbs-content、dbs-deconstruct、dbs-xhs-title、dbs-hook、xhs-copywriter、dbs-resonate、dbs-ai-check、guizang-social-card-skill）；任一缺失即依赖损坏，中止
-- 更新失败 / 本地有未提交改动 / 无法连接远程 / 打包不完整 → 立即中止，报告原因。**禁止用过期或残缺版本继续**
-- 远程存在更新 → 合并到最新后再继续（更新会同步刷新 skills/ 内打包的依赖）
-- **两级更新检测（强制，优先执行）**：若存在 `<SKILL_REPO_DIR>/.local/check_updates.py`，用受管 Python 运行之（`python .local/check_updates.py`），替代上述手工比对：
-  - 第一级：检测本 skill 自身是否有更新（git fetch 比对，git 不可用时自动回退 GitHub API 比对）。
-  - 第二级：逐个检测 `.local/deps.json` 中各依赖 skill 的上游是否有更新（dbs 系列 → `dontbesilent2025/dbskill` 对应子路径；guizang → `op7418/guizang-social-card-skill`；xhs-copywriter → 本仓库子路径）。
-  - 退出码 0 → 继续执行；退出码 10 → 向用户**明确提示**哪些模块有更新并停下等待确认：自身更新经确认后执行 `--apply-self`；某依赖更新经确认后执行 `--apply --only <依赖名>`，仅替换该依赖的 `skills/<名>` 目录（保留 node_modules），不影响其他模块。
-  - 仓库地址与版本基线持久化于 `.local/deps.json`（脚本自动回写）；检测日志追加于 `.local/update_check.log`。二者均在 `.local/` 内，不污染仓库树。
-  - `.local/` 缺失（如新机器首次运行）→ 回退上述手工 git/WebFetch 比对，并提示可从维护者处获取检测脚本。
+# 提问规范（全局，强制，适用于所有需要用户输入的环节）
 
-# 环境自检（次步，强制，任一失败即中止）
+- **禁止交互式弹窗提问**（不使用 AskUserQuestion 等交互组件）；所有提问在对话中以纯文本进行。
+- **每次只问一个问题**；给出**编号选项**（1. 2. 3. …）；除问题与选项外**不输出多余信息**。
+- 用户回答编号或自定义内容后，再进入下一环节或下一个问题。
 
-skill 无法以文件形式打包运行时环境，执行前必须逐项检测，全部通过方可进入命令流程：
+# 环境检测（每次任务开始前，强制，禁止跳过）
 
-| 项目 | 检测命令 | 通过标准 | 用途 |
+> 任何任务步骤开始之前必须完成本节全部检测。任一必检项失败即中止并报告；禁止跳过检测直接执行，禁止用降级方案替代。
+
+## 1. 依赖 skill 检测（安装 / 更新 / 记录）
+
+依赖表（与 `references/dependencies.md`、`.local/ensure_deps.sh` 三处一致，改动须同步）：
+
+| 依赖 | 用途（流程步骤） | 安装位置 | 缺失时安装来源 |
 |---|---|---|---|
-| Node.js | `node --version` | ≥ v18，命令可执行 | guizang 渲染与 `validate-social-deck.mjs` 校验 |
-| guizang 渲染依赖 | `node -e "require.resolve('playwright')"` 于 `skills/guizang-social-card-skill/` 目录；且 `npx playwright install chromium` 已就绪（Chromium 二进制存在） | 模块可解析 **且** 浏览器二进制存在 | guizang 出图与 `validate-social-deck.mjs` 校验（该脚本 `import { chromium } from "playwright"`） |
-| git | `git --version` | 可执行 | 版本自检；缺失则必须走 WebFetch 比对兜底 |
-| 网络 | WebFetch 可达 `raw.githubusercontent.com` | 可达 | 版本比对、Pexels 取图、Playwright/Chromium 首次安装 |
+| xiaohongshu-keyword-collector | 热搜词采集（步骤 3） | `~/.workbuddy/skills/xiaohongshu-keyword-collector` | `openlark/skills` 子路径 `skills/xiaohongshu-keyword-collector`（免费、无 API、浏览器自动化） |
+| dbs-content | 选题梳理与写稿方向诊断（步骤 4） | `~/.workbuddy/skills/dbs-content` | `dontbesilent2025/dbskill` 对应子路径 |
+| dbs-hook | 钩子生成（步骤 4） | `~/.workbuddy/skills/dbs-hook` | `dontbesilent2025/dbskill` 对应子路径 |
+| multi-search-engine | 实证数据检索（步骤 8） | `~/.workbuddy/skills/multi-search-engine` | 本机已装，无自动安装来源 |
+| content-deai-engine | 写稿与修订（步骤 9、10、12） | `~/.workbuddy/skills/content-deai-engine` | `lanyasheng/content-deai-engine` |
+| dbs-resonate | 审稿（步骤 10、12） | `~/.workbuddy/skills/dbs-resonate` | `dontbesilent2025/dbskill` 对应子路径 |
+| guizang-social-card-skill | 图文卡出图（步骤 13） | `~/.workbuddy/skills/guizang-social-card-skill` | `op7418/guizang-social-card-skill` |
 
-- **guizang 渲染依赖预装（强制，任一缺失即中止）**：进入命令流程前，确认 `skills/guizang-social-card-skill/node_modules/playwright` 存在；不存在则在该目录依次执行：
-  1. `npm install --no-audit --no-fund`（安装 playwright 模块）
-  2. `npx playwright install chromium`（安装 Chromium 浏览器二进制，需网络与操作系统依赖）
-  - 安装失败（无网络 / 无权限 / 系统依赖缺失）→ 立即中止，按「依赖失败处理」规则报告具体原因。
-  - ⚠️ 仅 `npx playwright --version` 可用**不足以**满足 `validate-social-deck.mjs` 的本地 `import` 解析，必须确认 `node_modules/playwright` 已落于 guizang 目录内。
-  - `node_modules/` 已被 `.gitignore` 忽略，不随仓库提交；换到其他电脑首次运行须重新执行上述预装。
-- 任一项不满足 → 立即中止，逐项报告缺失内容与安装建议（如「请安装 Node.js ≥18」「请执行 guizang 目录下的 npm install 与 playwright install chromium」），**禁止跳过检测直接执行，禁止用降级方案替代**。
-- 用户补齐环境后从版本自检重新开始。
+执行机制：运行 `<SKILL_REPO_DIR>/.local/ensure_deps.sh`（bash）。脚本对依赖表逐项执行：
 
-# 命令
+1. **存在性**：`~/.workbuddy/skills/<name>/SKILL.md` 存在 → 记录；缺失且有来源 → `git clone` 安装到本机 agent 全局 skills 目录；缺失且无来源 → 记录 `missing-optional`（不阻塞，但对应步骤需要时按依赖失败处理）。
+2. **最新性**：有 git 来源的依赖，用 `git ls-remote` 对比上游 HEAD 与本地 commit；过期 → **自动更新到最新**（整仓克隆类 fetch + reset；monorepo 复制类重新克隆后复制子路径）；无法连接上游仅告警、不阻塞。
+3. **深度依赖**：`guizang-social-card-skill`（出图）与 `xiaohongshu-keyword-collector`（浏览器采集）共用 Playwright 模块 + Chromium 二进制，检测点 `~/.workbuddy/skills/guizang-social-card-skill/node_modules/playwright` 与 `chromium.executablePath()`；缺失自动安装，自修复失败即中止。
+4. **记录**：全部解析路径、状态、commit、深度依赖结果写入 `<SKILL_REPO_DIR>/.local/deps.json`；后续调用依赖从该记录取路径（缺省 `~/.workbuddy/skills/<name>/SKILL.md`），禁止硬编码。
+5. **超时与重试**：git 探测 180s / 克隆 300s / 拉取 180s / npm 60s / Playwright 900s；克隆与拉取最多重试 2 次；超时打印原因与修复方案，不无限挂起。
 
-1. 调用 `dbs-goal`（读取本项目 `skills/dbs-goal/SKILL.md` 并按其完整规范执行）接收用户关于本次发帖的原始想法原话，把发帖目标审计为可检查交付物（下一步做什么、什么时候算完）；目标结论经用户确认后随信息包全程传递；未确认禁止后续步骤。
-2. 确认基础选题（基于已确认的目标结论推导；缺失则询问，禁止臆造）。
-3. 调用 `dbs-content`（读取本项目 `skills/dbs-content/SKILL.md` 并按其完整规范执行）诊断切入角度；产出 2-3 候选角度列给用户确认；未确认禁止后续步骤。
-4. 调用 `dbs-deconstruct`（读取本项目 `skills/dbs-deconstruct/SKILL.md` 并按其完整规范执行）拆解已确认角度中的核心概念，锁定写稿方向；拆解结论随信息包传给写稿与标题环节。
-5. 调用 `dbs-xhs-title`（读取本项目 `skills/dbs-xhs-title/SKILL.md` 并按其完整规范执行）生成 ≤20 字候选标题；列举供用户选定；未选定禁止后续步骤。
-6. 调用 `dbs-hook`（读取本项目 `skills/dbs-hook/SKILL.md` 并按其完整规范执行）基于选题+角度+标题生成开场钩子候选；列举供用户选定；未选定禁止写稿。
-7. 调用 `xhs-copywriter`（读取本项目 `skills/xhs-copywriter/SKILL.md` 并按其完整规范执行）写稿：主 skill 组装信息包（选题/目标结论/角度/概念拆解/标题/钩子/痛点关键词/获客意图）传入，接收五段结构定稿；**禁止主 skill 亲自写稿**。
-8. 调用 `dbs-resonate`（读取本项目 `skills/dbs-resonate/SKILL.md` 并按其完整规范执行）对定稿做共鸣诊断；诊断建议交回 `xhs-copywriter` 修订模式落实；主 skill 向用户展示诊断结论与修订说明。
-9. 调用 `dbs-ai-check`（读取本项目 `skills/dbs-ai-check/SKILL.md` 并按其完整规范执行）检测修订稿 AI 写作特征；命中 AI 指纹 → 展示检测报告并弹交互式问题框询问用户「进入其改写引导 / 保持原稿」，改写结论交 `xhs-copywriter` 修订模式落实，禁止自动改写；未命中 → 放行。
-10. 调用 `guizang-social-card-skill`（读取本项目 `skills/guizang-social-card-skill/SKILL.md` 并按其完整规范执行；其模板/脚本/参考均在该目录内，使用相对路径调用）：≥3 张 3:4（1080×1440）轮播卡，完整承载终稿同一份文案；图内文字严格对齐、字号层级遵循文案层级；最小字号 ≥28px；轮播用「左滑」+页码。**主 skill 须将本次落盘子目录 `<SKILL_REPO_DIR>/output/<选题名_日期>` 作为 guizang 的 task folder 显式传入（覆盖其默认 `local-tests/<slug>/`），使渲染产物直接落入已隔离的输出目录，避免仓库内残留未隔离的临时目录。**
-11. 本地落盘：
-    - 读取 `<SKILL_REPO_DIR>/.local/output-dir.txt` 中已记住的落盘目录；
-    - 不存在 → 弹交互式问题框询问落盘目录，**默认选项为 skill 同目录**（`<SKILL_REPO_DIR>/output/`），用户选定后写入 `.local/output-dir.txt` 记住，后续执行直接沿用；
-    - 子目录 `选题名_日期`；同选题修改复用原目录覆盖更新；
-    - 终态输出文字区纯文本 + 图片 + 落盘子目录路径。
+中止条件（脚本退出码非 0）：有来源却安装失败 / 深度依赖自修复失败 / git 依赖过期且自动更新失败 → 立即中止，报告具体原因。
 
-# 依赖来源（自包含，禁止引用宿主机器已安装版本）
+## 2. 主机运行时检测（缺失自动安装到本机全局目录并自动更新）
 
-- 全部依赖 skill 已原样打包于本项目 `skills/` 目录，与宿主环境无关。
-- `dbs-goal` → `skills/dbs-goal/SKILL.md`
-- `dbs-content` → `skills/dbs-content/SKILL.md`
-- `dbs-deconstruct` → `skills/dbs-deconstruct/SKILL.md`
-- `dbs-xhs-title` → `skills/dbs-xhs-title/SKILL.md`
-- `dbs-hook` → `skills/dbs-hook/SKILL.md`
-- `xhs-copywriter` → `skills/xhs-copywriter/SKILL.md`
-- `dbs-resonate` → `skills/dbs-resonate/SKILL.md`
-- `dbs-ai-check` → `skills/dbs-ai-check/SKILL.md`
-- `guizang-social-card-skill` → `skills/guizang-social-card-skill/`（含 assets/ 模板、references/、scripts/）
-- 调用任一依赖时，必须读取本项目内的对应文件并遵循其流程；禁止改用宿主机器上同名已安装 skill。
-- 各依赖的传入/接收/禁止干预点详见 `references/dependencies.md`。
+| 项目 | 检测命令 | 通过标准 | 缺失 / 不足时策略 |
+|---|---|---|---|
+| Node.js | `node --version` | ≥ v18（guizang 渲染与 `validate-social-deck.mjs` 校验要求） | **自动安装到本机全局受管目录并更新到满足要求的版本**（install_binary / managed runtime，跨项目共享，不污染系统环境） |
+| Python | `python --version` | 当前无任何依赖要求 Python；仅在未来某依赖声明需要时启用检测 | 同 Node.js 策略：安装到本机全局受管目录并自动更新 |
+| git | `git --version` | 可执行（依赖安装与更新） | 报告缺失与安装建议，中止 |
+| 网络 | 可达 `github.com` / `raw.githubusercontent.com` | 可达（依赖安装更新、实证检索、网络取图） | 报告并中止 |
 
-# 运行产物隔离（强制）
+- 运行时安装与更新由主 skill 调用本机受管运行时能力完成；每次任务开始前重新检测，版本不足即更新。
+- 用户补齐环境后，从环境检测第 1 节重新开始。
 
-- 运行期记忆与产物一律写入 `.local/`（目录记忆等私有配置）与落盘目录（成稿/图片）；两者均已列入 `.gitignore`。
-- ❌ 禁止把运行记忆、成稿、图片、渲染中间产物提交或推送到 GitHub 仓库。
-- ❌ 禁止把中间产物（渲染脚本副本/html/temp）留在落盘子目录。
+# 流程（14 步，严格顺序，禁止跳步）
+
+## 步骤 1：接收用户输入
+
+用户提供基础选题思路（必填）与配图（可选）。主 skill 原样记录，不加工、不润色。
+
+## 步骤 2：信息补全（主 skill 职责）
+
+完整信息 = **选题思路 + 面向人群画像 + 图文贴目的（引流 / 获客 / 点赞收藏等）**。
+
+- 逐项核对；每缺失一项，按提问规范问一个问题补齐（缺几项分几轮，每轮一题）。
+- 选项须结合选题思路给出，禁止空泛模板。目的缺失时提问示例：「这篇图文贴的核心目的是？1. 引流（关注/私信） 2. 获客（咨询/成交） 3. 点赞收藏（曝光权重） 4. 其他（请直接说明）」。
+- 三项齐全后整理为信息包底稿，进入步骤 3。
+
+## 步骤 3：热搜词采集（xiaohongshu-keyword-collector）
+
+- 主 skill 以「选题思路 + 人群画像 + 图文贴目的」提炼 1–3 个种子词传入，按该 skill 的 Workflow 执行（打开 explore → 输入种子词不提交 → 采集搜索联想下拉）。
+- 接收联想词列表后，主 skill 按与选题思路的相关度筛选 **5–10 个最贴近的搜索关键词**，写入信息包。
+- 采集结果不足 5 个时，调整种子词再采一轮；仍不足则如实记录实际数量继续，**禁止编造热词凑数、禁止用非小红书来源词冒充热搜词**。
+
+## 步骤 4：选题 / 写稿方向 / 钩子产出（dbs-content + dbs-hook）
+
+主 skill 把「选题思路 + 人群画像 + 图文贴目的 + 热搜词」打包，依次调用：
+
+1. **dbs-content**（选题与写稿方向）：按其 Phase 1→4 标准流程执行（接收内容 → 形式匹配 → 五维诊断 → 诊断报告），目标形式固定为「小红书图文」，产出 **3–5 个选题**及各自**写稿方向**（切入角度、内容结构、第一步行动）。
+2. **dbs-hook**（钩子）：把同一信息包与 dbs-content 的选题/方向结论作为素材传入，按其「话题 + Hook + 可信度」公式与 Phase 4 三方法（素材提取 / 素材增补 / 悬念制造）产出钩子候选（10–15 条，含 Top3 推荐）。若其按 Phase 2 判定素材不足而停止优化，主 skill 把停止结论原样转达用户并回到步骤 2 补充素材，**禁止强迫其生成**。
+
+一致性闸门（强制）：主 skill 呈现给用户前自检——选题须源自用户思路与热搜词，写稿方向须落在对应选题上，钩子须服务所选选题+方向；三者强相关且不跑题方可呈现，否则退回对应依赖重产并说明退回原因。
+
+## 步骤 5：用户确认选题
+
+列出 3–5 个候选选题（编号选项，一次一问）。用户未选定，禁止后续步骤。
+
+## 步骤 6：用户确认行文方向
+
+列出已选定选题下的候选写稿方向（编号选项，一次一问）。用户未选定，禁止后续步骤。
+
+## 步骤 7：用户确认钩子
+
+列出与已选定选题+方向对应的钩子候选（编号选项，标注各自公式结构），一次一问。用户未选定，禁止写稿。
+
+- 步骤 5/6/7 的确认结果必须彼此强相关，且与用户思路、热搜词强相关；用户改选任一上游项，下游已确认项作废，从重产环节重走。
+
+## 步骤 8：实证数据检索（multi-search-engine）
+
+- 主 skill 分析「已确认选题 + 行文方向 + 钩子 + 人群画像 + 目的」，列出需要检索的实证清单：支撑论据的**真实数据（须标注来源）**、公开发布的观点信息、权威信息（官方发布 / 学术 / 行业报告）等一切有利于行文的信息。
+- 调用 multi-search-engine 按其 Workflow（语言评估 → 受控检索 → 结果聚合）执行，接收**带来源链接**的检索报告，写入信息包。
+- 分析结论为「无需检索」时，记录理由后直接进入步骤 9；需要检索而该依赖不可用 → 按依赖失败处理中止。
+- 禁止把未经验证的来源当事实写入信息包；检索不到的信息标注「待核实」。
+
+## 步骤 9：初稿撰写（content-deai-engine）
+
+主 skill 组装完整信息包传入：选题思路、人群画像、图文贴目的、热搜词（5–10 个）、已确认选题、已确认行文方向、已确认钩子、实证检索报告（带来源）、用户配图（如有）、目标平台=小红书、时间窗=当前、素材来源标注。
+
+- 按其完整流程执行：先决条件 → AI 味诊断 → 四步重写 → 平台适配（小红书：痛点场景 → 亲历细节 → 3 步做法 → 互动提问）→ 标准输出（标题候选 / 正文 / 评论区首评 / 标签建议 / 发布前风险提示）→ 质量门禁 → 三角色自检。
+- 主 skill 接收标准输出；最终标题从其标题候选中结合已确认选题锁定，随步骤 11 一并由用户确认。
+- 约束传入：热搜词须自然融入正文（≥2–3 个），不得堆砌罗列；数据与观点须对应检索报告来源，禁止臆造；无法验证的信息标注「待核实」。
+
+## 步骤 10：审稿循环（dbs-resonate 审、content-deai-engine 改，主 skill 控制）
+
+1. 主 skill 把当前稿交 **dbs-resonate**，按其 Step 1→4 执行（提取主张 → 核心机制审查 → 五维度共鸣诊断 → 诊断报告）。
+2. 其报告中的【具体改法】（删掉 / 缩短为支撑细节 / 强化 / 保持不动 + 改完后的骨架）即为**修改方向**，主 skill 原样转交 **content-deai-engine**，按其修订模式（四步重写 / 快速调用模式）落实一轮修订。**禁止主 skill 自行改稿，禁止写稿 skill 不按修改方向修改。**
+3. 修订稿再交 dbs-resonate 复审；如此循环，直至其五维诊断全部有效、无删除/强化建议（即**放行**）。
+4. 同一修改方向连续两轮未获放行 → 主 skill 停止循环，向用户报告阻塞点与双方结论，由用户裁决。
+
+## 步骤 11：最终稿用户确认
+
+向用户输出最终稿全文（标题 + 正文 + 评论区首评 + 标签建议 + 来源标注），按提问规范问一个确认问题：「最终稿确认：1. 通过 2. 需修改（请指出修改方向）」。
+
+## 步骤 12：循环至用户通过
+
+用户提出修改 → 主 skill 把用户修改方向并入步骤 10 的循环（content-deai-engine 改、dbs-resonate 审），修订稿再回到步骤 11 请用户确认；重复直至用户确认通过。
+
+## 步骤 13：图文贴生成（guizang-social-card-skill）
+
+- 主 skill 先按提问规范问风格（一次一题）：「图文贴风格选择：1. Editorial Magazine × E-ink（电子杂志 · 图文混排） 2. Swiss International（瑞士国际主义）」；选定后再问主题色（Editorial：Ink Classic / Indigo Porcelain / Forest Ink / Kraft Paper / Dune / Midnight Ink；Swiss：IKB Blue / Lemon Yellow / Lemon Green / Safety Orange；编号列出）。
+- 配图：用户已提供 → 作为素材传入；未提供 → 按其内层流程向用户一问（自备照片 / 网络取图 / AI 生成），主 skill 把该问原样转达为编号选项，禁止代答。
+- 主 skill 把落盘子目录 `<落盘根目录>/output/<最终标题_YYYYMMDD>` 作为其 task folder **显式传入**（覆盖其默认 `local-tests/<slug>/`），使渲染产物直接落入已隔离的输出目录。
+- 按其 Intake → Extract Story → Choose Style Mode → Plan Pages → Build & Render → Image/Screenshot Handling → Deliver 全链路执行；小红书 3:4（1080×1440）轮播卡，页数、排版、字号层级、QA 均遵循其规范。
+- 类目落在其能力边界外被拒单 → 按依赖失败处理中止，禁止回退默认方案。
+
+## 步骤 14：落盘
+
+- 落盘前按提问规范问一次目录（一次一题）：「落盘位置：1. 默认（skill 内部 `output/`） 2. 自定义（请给出绝对路径）」。
+- 子目录规则不变：`<选定根目录>/output/<最终标题_YYYYMMDD>/`；默认即 `<SKILL_REPO_DIR>/output/<最终标题_YYYYMMDD>/`。
+- 产物清单：最终稿文案 md（标题 / 正文 / 评论区首评 / 标签 / 来源标注）+ 全部卡片 PNG + 网络取图来源记录（如有）。
+- 同选题再次修改复用原目录覆盖更新；中间产物（渲染脚本副本 / html / temp）禁止留在落盘目录。
+- 终态向用户输出：文字区全文 + 图片 + 落盘子目录路径。
 
 # 依赖失败处理（强制）
 
-- 任一打包依赖出问题（目录缺失 / SKILL.md 缺失 / 报错 / 返回不可用 / 超时 / 拒绝 / 能力边界外拒单 / 信息包被退回且无法补全）→ 立即中止全部执行。
+- 环境检测失败、依赖目录或 SKILL.md 缺失、依赖报错 / 返回不可用 / 超时 / 能力边界拒单、信息包被退回且无法补全 → 立即中止全部执行，报告具体原因。
 - 禁止回退到任何默认方案或替代路径。
-- 依赖 skill 自身给出默认/兜底方案时 → 必须弹出交互式问题框（AskUserQuestion）询问用户是否采纳；未经用户明确选择，禁止自动采纳或拒绝。
-- 版本自检、环境自检或打包完整性校验失败 → 同此规则，中止并报告。
+- 依赖 skill 自身给出默认 / 兜底方案时 → 按提问规范询问用户是否采纳；未经用户明确选择，禁止自动采纳或拒绝。
 
 # 内层自治（强制）
 
-- 调用任一依赖时，完整遵循其 SKILL.md 规范流程，不裁剪、不改写其决策逻辑。
-- 主 skill 仅负责外层编排、信息收集与传递、接收依赖返回；禁止在主 skill 内重写依赖职责（自行写稿、自行出图、自行套标题公式、自行诊断、自行判定 AI 味）。
+- 调用任一依赖，完整遵循其 SKILL.md 规范流程，不裁剪、不改写其决策逻辑。
+- 主 skill 仅负责外层编排、信息收集与传递、接收依赖返回与最终落盘；禁止在主 skill 内重写依赖职责（自行写稿、自行审稿、自行出图、自行诊断、自行检索聚合）。
+- 各 dbs 子 skill 内部的 `/dbs*` 路由导航仅作原始形态保留，本流程已由主 skill 接管全部路由，不得令流程脱离主编排。
 
 # 禁令
 
-- ❌ 禁止版本自检、环境自检或打包完整性校验失败后继续执行。
-- ❌ 禁止依赖失败时回退默认/替代方案。
-- ❌ 禁止未经用户交互确认即采纳依赖的默认方案。
-- ❌ 禁止引用宿主机器上已安装的同名 skill（必须用本项目 skills/ 内打包副本）。
-- ❌ 禁止干预依赖 skill 内层执行逻辑。
-- ❌ 禁止主 skill 亲自写稿、改稿（一律经 `xhs-copywriter`）。
-- ❌ 禁止未确认发帖目标、切入角度即进入后续步骤。
-- ❌ 禁止未选定标题或开场钩子即写稿/出图。
-- ❌ 禁止跳过共鸣诊断与 AI 特征检测直接出图。
-- ❌ 禁止 dbs-ai-check 命中后未经用户选择即自动改写文案。
-- ❌ 禁止图文卡少于 3 张。
-- ❌ 禁止图内文字未严格对齐或最小字号 <28px。
-- ❌ 禁止图文卡文案与文字区文案不一致。
-- ❌ 禁止文案含 `#话题` 标签。
-- ❌ 禁止硬编码落盘目录或跳过落盘目录交互确认（首次）。
-- ❌ 禁止将运行记忆与产物上传 GitHub。
+- ❌ 禁止跳过环境检测（依赖安装 / 更新 / 记录、主机运行时）直接执行任务。
+- ❌ 禁止跳步、乱序，或未经用户确认越过步骤 5 / 6 / 7 / 11 的确认闸门。
+- ❌ 禁止主 skill 亲自产出专业内容（选题诊断、写稿方向、钩子、检索聚合、文案、审稿、出图）。
+- ❌ 禁止选题 / 写稿方向 / 钩子彼此脱节或偏离用户思路与热搜词（跑题即退回重产）。
+- ❌ 禁止编造热搜词、数据、来源；未验证信息必须标注「待核实」。
+- ❌ 禁止审稿循环中主 skill 自行改稿；修改方向必须来自 dbs-resonate 报告，改稿必须经 content-deai-engine 落实。
+- ❌ 禁止交互式弹窗提问；禁止一次多问；禁止提问时输出与问题无关的信息。
+- ❌ 禁止未经用户确认落盘目录即落盘；禁止把运行记忆（.local/）与产物（output/）提交或推送到 GitHub。
