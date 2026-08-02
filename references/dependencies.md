@@ -1,8 +1,8 @@
 # 依赖调用规范（显式 · 全部指向本机 agent skills 目录）
 
-本 skill **不自带依赖副本**：所有依赖 skill 安装在本机 agent skills 目录 `~/.workbuddy/skills/<name>/`，由 `.local/ensure_deps.sh` 检查 / 安装 / 更新并把解析路径写入 `.local/deps.json`。主 skill 调用任一依赖时，读取 `.local/deps.json` 记录（缺省 `~/.workbuddy/skills/<name>/SKILL.md`）并完整遵循其规范流程，不裁剪其决策逻辑。主 skill 仅负责流程控制、信息传递与最终结果输出；本文件规定「传什么、收什么、哪些点主 skill 不得插手」。所有相对路径均以各依赖自身目录 `~/.workbuddy/skills/<name>/` 为基准。
+本 skill **不自带依赖副本**：所有依赖 skill 安装在本机 agent skills 目录 `~/.workbuddy/skills/<name>/`，由 `.deps-cache/ensure_deps.sh` 检查 / 安装 / 更新并把解析路径写入 `.deps-cache/deps.json`。主 skill 调用任一依赖时，读取 `.deps-cache/deps.json` 记录（缺省 `~/.workbuddy/skills/<name>/SKILL.md`）并完整遵循其规范流程，不裁剪其决策逻辑。主 skill 仅负责流程控制、信息传递与最终结果输出；本文件规定「传什么、收什么、哪些点主 skill 不得插手」。所有相对路径均以各依赖自身目录 `~/.workbuddy/skills/<name>/` 为基准。
 
-依赖总表（7 个，与 SKILL.md「环境检测」、`.local/ensure_deps.sh` 三处一致）：
+依赖总表（7 个，与 SKILL.md「环境检测」、`.deps-cache/ensure_deps.sh` 三处一致）：
 
 | 依赖 | 用途（流程步骤） | 缺失时安装来源 |
 |---|---|---|
@@ -109,7 +109,7 @@
 
 ## 深度依赖与最新性校验模型
 
-> 本模型确保：每个依赖 skill 不仅自身存在，其**运行时深度依赖**也齐备；且 git 类依赖**始终与上游保持最新**。全部在任务开始前的环境检测中由 `.local/ensure_deps.sh` 强制完成，每次运行都做。
+> 本模型确保：每个依赖 skill 不仅自身存在，其**运行时深度依赖**也齐备；且 git 类依赖**始终与上游保持最新**。全部在任务开始前的环境检测中由 `.deps-cache/ensure_deps.sh` 强制完成，每次运行都做。
 
 ### 1. 深度依赖映射（在 `ensure_deps.sh` 的 `deep_deps_of()` 维护）
 
@@ -126,7 +126,7 @@
 ### 2. 最新性强制校验（git 类依赖）
 
 - 对每个有来源（git url）的依赖，脚本用 `git ls-remote <url> HEAD` 取得上游默认分支最新 commit。
-- 本地 commit 取值：目标为 git 仓库时直接读 `.git` HEAD；否则读 `.local/.dep_commits/<name>` 中记录的 commit。
+- 本地 commit 取值：目标为 git 仓库时直接读 `.git` HEAD；否则读 `.deps-cache/.dep_commits/<name>` 中记录的 commit。
 - **本地版本未知（无 `.git` 且无 commit 记录）且上游可达** → 记录上游 HEAD 为基线 commit（**不改动任何文件**），后续上游 HEAD 变更即据此触发自动更新；避免对可能含本机定制的副本做盲目覆盖。
 - 不一致（过期）→ **自动快进到最新**：目标带 `.git` 时 `git fetch --depth 1 + reset --hard origin/<branch>`（保留 `node_modules` 等未跟踪文件）；独立仓库但缺 `.git` 时新鲜克隆上游并移植 `.git` 后 `reset --hard` 对齐（未跟踪文件保留）；monorepo 复制类重新克隆并复制子路径覆盖。更新后刷新记录。
 - 无法连接上游 → 跳过更新仅告警，**不阻塞**主流程（以本地现有版本继续）。
@@ -134,7 +134,7 @@
 
 ### 3. 超时与重试约束（防止网络调用无限挂起）
 
-- 所有网络调用均被 `.local/ensure_deps.sh` 包裹在超时内（GNU `timeout`，不可用时降级为「后台进程 + 超时 kill」兜底），**超时即中止该单次调用并继续，不会让整个脚本卡死**：
+- 所有网络调用均被 `.deps-cache/ensure_deps.sh` 包裹在超时内（GNU `timeout`，不可用时降级为「后台进程 + 超时 kill」兜底），**超时即中止该单次调用并继续，不会让整个脚本卡死**：
 
   | 操作 | 超时 | 触发后的行为 |
   |---|---|---|
@@ -156,7 +156,7 @@
 ## 环境检测实施细则
 
 - **时机**：每次任务开始前，先于流程 14 步；禁止跳过。
-- **依赖 skill 检测**：运行 `<SKILL_REPO_DIR>/.local/ensure_deps.sh`（机制见上节）；退出码非 0 即中止。
+- **依赖 skill 检测**：运行 `<SKILL_REPO_DIR>/.deps-cache/ensure_deps.sh`（机制见上节）；退出码非 0 即中止。
 - **主机运行时检测**（依赖检测通过后执行）：
 
   | 项目 | 检测命令 | 通过标准 | 缺失 / 不足时策略 |
@@ -179,4 +179,4 @@
 - 每次落盘前按提问规范问一次目录（一次一题、编号选项）：默认 = `<SKILL_REPO_DIR>/output/`；用户可指定其他根目录，子目录规则不变：`<根目录>/output/<最终标题_YYYYMMDD>/`。
 - 同选题再次修改在原子目录内覆盖更新，禁止另建新时间戳子目录。
 - 产物：最终稿文案 md（标题 / 正文 / 评论区首评 / 标签 / 来源标注）+ 全部卡片 PNG + 网络取图来源记录（如有，如 `assets/SOURCES.md`）。
-- 禁止：硬编码落盘目录、未经询问即落盘、把中间产物（渲染脚本副本 / html / temp）留在落盘目录、把运行记忆（`.local/`）与产物（`output/`）提交或推送到仓库（两者均已列入 `.gitignore`）。
+- 禁止：硬编码落盘目录、未经询问即落盘、把中间产物（渲染脚本副本 / html / temp）留在落盘目录、把运行记忆（`.deps-cache/`）与产物（`output/`）提交或推送到仓库（两者均已列入 `.gitignore`）。

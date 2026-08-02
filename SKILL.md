@@ -1,6 +1,6 @@
 ---
 name: redbook-post-gen
-description: 小红书图文帖生成器。主 skill 只负责流程控制、信息传递与最终结果输出；热搜词采集、选题与写稿方向诊断、钩子生成、实证检索、写稿、审稿、出图全部由安装在本机 agent skills 目录（~/.workbuddy/skills/）的依赖 skill 按其内部规范完成。每次任务开始前强制完整环境检测：依赖缺失自动安装到全局 skills 目录、过期自动更新、解析位置记录到 .local/deps.json；主机运行时（Node.js 等）缺失自动安装到本机全局目录并自动更新。流程：信息收集 → 热搜词 → 选题/写稿方向/钩子 → 用户三点确认 → 实证检索 → 写稿 → 审稿循环 → 用户确认循环 → 出图 → 落盘。
+description: 小红书图文帖生成器。主 skill 只负责流程控制、信息传递与最终结果输出；热搜词采集、选题与写稿方向诊断、钩子生成、实证检索、写稿、审稿、出图全部由安装在本机 agent skills 目录（~/.workbuddy/skills/）的依赖 skill 按其内部规范完成。每次任务开始前强制完整环境检测：依赖缺失自动安装到全局 skills 目录、过期自动更新、解析位置记录到 .deps-cache/deps.json；主机运行时（Node.js 等）缺失自动安装到本机全局目录并自动更新。流程：信息收集 → 热搜词 → 选题/写稿方向/钩子 → 用户三点确认 → 实证检索 → 写稿 → 审稿循环 → 用户确认循环 → 出图 → 落盘。
 ---
 
 # 职责边界（总纲，强制）
@@ -23,7 +23,7 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 
 ## 1. 依赖 skill 检测（安装 / 更新 / 记录）
 
-依赖表（与 `references/dependencies.md`、`.local/ensure_deps.sh` 三处一致，改动须同步）：
+依赖表（与 `references/dependencies.md`、`.deps-cache/ensure_deps.sh` 三处一致，改动须同步）：
 
 | 依赖 | 用途（流程步骤） | 安装位置 | 缺失时安装来源 |
 |---|---|---|---|
@@ -35,12 +35,12 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 | dbs-resonate | 审稿（步骤 10、12） | `~/.workbuddy/skills/dbs-resonate` | `dontbesilent2025/dbskill` 对应子路径 |
 | guizang-social-card-skill | 图文卡出图（步骤 13） | `~/.workbuddy/skills/guizang-social-card-skill` | `op7418/guizang-social-card-skill` |
 
-执行机制：运行 `<SKILL_REPO_DIR>/.local/ensure_deps.sh`（bash）。脚本对依赖表逐项执行：
+执行机制：运行 `<SKILL_REPO_DIR>/.deps-cache/ensure_deps.sh`（bash）。脚本对依赖表逐项执行：
 
 1. **存在性**：`~/.workbuddy/skills/<name>/SKILL.md` 存在 → 记录；缺失且有来源 → `git clone` 安装到本机 agent 全局 skills 目录；缺失且无来源 → 记录 `missing-optional`（不阻塞，但对应步骤需要时按依赖失败处理）。
 2. **最新性**：有 git 来源的依赖，用 `git ls-remote` 对比上游 HEAD 与本地 commit；过期 → **自动更新到最新**（整仓克隆类 fetch + reset；monorepo 复制类重新克隆后复制子路径）；无法连接上游仅告警、不阻塞。
 3. **深度依赖**：`guizang-social-card-skill`（出图）与 `xiaohongshu-keyword-collector`（浏览器采集）共用 Playwright 模块 + Chromium 二进制，检测点 `~/.workbuddy/skills/guizang-social-card-skill/node_modules/playwright` 与 `chromium.executablePath()`；缺失自动安装，自修复失败即中止。
-4. **记录**：全部解析路径、状态、commit、深度依赖结果写入 `<SKILL_REPO_DIR>/.local/deps.json`；后续调用依赖从该记录取路径（缺省 `~/.workbuddy/skills/<name>/SKILL.md`），禁止硬编码。
+4. **记录**：全部解析路径、状态、commit、深度依赖结果写入 `<SKILL_REPO_DIR>/.deps-cache/deps.json`；后续调用依赖从该记录取路径（缺省 `~/.workbuddy/skills/<name>/SKILL.md`），禁止硬编码。
 5. **超时与重试**：git 探测 180s / 克隆 300s / 拉取 180s / npm 60s / Playwright 900s；克隆与拉取最多重试 2 次；超时打印原因与修复方案，不无限挂起。
 
 中止条件（脚本退出码非 0）：有来源却安装失败 / 深度依赖自修复失败 / git 依赖过期且自动更新失败 → 立即中止，报告具体原因。
@@ -167,4 +167,4 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 - ❌ 禁止编造热搜词、数据、来源；未验证信息必须标注「待核实」。
 - ❌ 禁止审稿循环中主 skill 自行改稿；修改方向必须来自 dbs-resonate 报告，改稿必须经 content-deai-engine 落实。
 - ❌ 禁止交互式弹窗提问；禁止一次多问；禁止提问时输出与问题无关的信息。
-- ❌ 禁止未经用户确认落盘目录即落盘；禁止把运行记忆（.local/）与产物（output/）提交或推送到 GitHub。
+- ❌ 禁止未经用户确认落盘目录即落盘；禁止把运行记忆（.deps-cache/）与产物（output/）提交或推送到 GitHub。
