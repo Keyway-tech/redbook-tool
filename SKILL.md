@@ -27,7 +27,7 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 
 | 依赖 | 用途（流程步骤） | 安装位置 | 缺失时安装来源 |
 |---|---|---|---|
-| xiaohongshu-keyword-collector | 热搜词采集（步骤 3） | `~/.workbuddy/skills/xiaohongshu-keyword-collector` | `openlark/skills` 子路径 `skills/xiaohongshu-keyword-collector`（免费、无 API、浏览器自动化） |
+| xhs-real-keywords | 热搜词采集（步骤 3） | `~/.workbuddy/skills/xhs-real-keywords` | `lsuyu899-tech/xhs-real-keywords` 子路径 `skills/xhs-real-keywords`（免费、无 API、带来源证据、浏览器自动化） |
 | dbs-content | 选题梳理与写稿方向诊断（步骤 4） | `~/.workbuddy/skills/dbs-content` | `dontbesilent2025/dbskill` 对应子路径 |
 | dbs-hook | 钩子生成（步骤 4） | `~/.workbuddy/skills/dbs-hook` | `dontbesilent2025/dbskill` 对应子路径 |
 | dbs-xhs-title | 标题撰写与确认（步骤 9） | `~/.workbuddy/skills/dbs-xhs-title` | `dontbesilent2025/dbskill` 对应子路径 |
@@ -41,7 +41,7 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 
 1. **存在性**：`~/.workbuddy/skills/<name>/SKILL.md` 存在 → 记录；缺失且有来源 → `git clone` 安装到本机 agent 全局 skills 目录；缺失且无来源 → 记录 `missing-optional`（不阻塞，但对应步骤需要时按依赖失败处理）。
 2. **最新性**：有 git 来源的依赖，用 `git ls-remote` 对比上游 HEAD 与本地 commit；过期 → **自动更新到最新**（整仓克隆类 fetch + reset；monorepo 复制类重新克隆后复制子路径）；无法连接上游仅告警、不阻塞。
-3. **深度依赖**：`guizang-social-card-skill`（出图）与 `xiaohongshu-keyword-collector`（浏览器采集）共用 Playwright 模块 + Chromium 二进制，检测点 `~/.workbuddy/skills/guizang-social-card-skill/node_modules/playwright` 与 `chromium.executablePath()`；缺失自动安装，自修复失败即中止。
+3. **深度依赖**：`guizang-social-card-skill`（出图）与 `xhs-real-keywords`（浏览器采集热搜词）共用 Playwright 模块 + Chromium 二进制，检测点 `~/.workbuddy/skills/guizang-social-card-skill/node_modules/playwright`、`~/.workbuddy/skills/xhs-real-keywords/node_modules/playwright` 与 `chromium.executablePath()`；缺失自动安装/从 guizang 复制，自修复失败即中止。
 4. **记录**：全部解析路径、状态、commit、深度依赖结果写入 `<SKILL_REPO_DIR>/.deps-cache/deps.json`；后续调用依赖从该记录取路径（缺省 `~/.workbuddy/skills/<name>/SKILL.md`），禁止硬编码。
 5. **超时与重试**：git 探测 180s / 克隆 300s / 拉取 180s / npm 60s / Playwright 900s；克隆与拉取最多重试 2 次；超时打印原因与修复方案，不无限挂起。
 
@@ -75,11 +75,13 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 - 选项须结合选题思路给出，禁止空泛模板。目的缺失时提问示例：「这篇图文贴的核心目的是？1. 引流（关注/私信） 2. 获客（咨询/成交） 3. 点赞收藏（曝光权重） 4. 其他（请直接说明）」。
 - 三项齐全后整理为信息包底稿，进入步骤 3。
 
-## 步骤 3：热搜词采集（xiaohongshu-keyword-collector）
+## 步骤 3：热搜词采集（xhs-real-keywords）
 
-- 主 skill 以「选题思路 + 人群画像 + 图文贴目的」提炼 1–3 个种子词传入，按该 skill 的 Workflow 执行（打开 explore → 输入种子词不提交 → 采集搜索联想下拉）。采集与抓取的具体执行由该 skill 内部决定，主 skill 不干预其流程与去重判定，仅传入种子词、接收结果。
-- 接收联想词列表后，主 skill 按与选题思路的相关度筛选 **5–10 个最贴近的搜索关键词**，写入信息包。
-- 采集结果不足 5 个时，调整种子词再采一轮；仍不足则如实记录实际数量继续，**禁止编造热词凑数、禁止用非小红书来源词冒充热搜词**。
+- 主 skill 以「选题思路 + 人群画像 + 图文贴目的」提炼 1–3 个种子词，读取 xhs-real-keywords 的 SKILL.md 并按其 Workflow 调用采集脚本（默认 `node <skill_dir>/scripts/collect-xhs-keywords.mjs --industry "<种子词>" --depth 1 --max-seeds 1 --channel chrome --headless --profile-dir .cache/xhs-profile --out-dir <临时目录>`）。采集策略、搜索联想/大家都在搜回退、去重、证据抓取由该 skill 内部决定，主 skill 不干预，仅传入种子词、接收 JSON 结果。
+- 接收**带来源证据**的关键词列表（每条含 `keyword` / `intent` / `sourceType` / `evidenceUrl` / `firstSourceSeed` / `sources`），主 skill 按与选题思路的相关度筛选 **5–10 个最贴近的搜索关键词**写入信息包，并保留各自来源证据链接（供步骤 9 标题与步骤 10 正文自然融入、供用户核验）。
+- **用户亲自确认闸门（强制，每次一题、编号选项）**：把筛选后的候选词以确认表呈现给用户——字段：关键词 | 来源类型 | 证据链接 | 意图。提问：「热搜词确认：1. 全部确认采用 2. 保留部分（请指出保留哪些 / 剔除哪些） 3. 重新采集（调整种子词）」。用户未明确确认前，**禁止进入步骤 4**。用户选 2 时按指定增删后再次呈现确认；选 3 时调整种子词重采一轮再确认。
+- 采集结果不足 5 个时：调整种子词再采一轮；仍不足则如实呈现实际数量，交用户裁决（用户可显式放行「不足 5 个也采用」或要求继续重采），**禁止编造热词凑数、禁止用非小红书来源词冒充热搜词**。
+- 禁止：主 skill 编造热词、用非小红书来源词冒充热搜词、遮盖或伪造来源证据链接、跳过用户确认直接进入选题环节。
 
 ## 步骤 4：选题 / 写稿方向 / 钩子产出（dbs-content + dbs-hook）
 
@@ -192,7 +194,7 @@ description: 小红书图文帖生成器。主 skill 只负责流程控制、信
 - ❌ 禁止跳步、乱序，或未经用户确认越过步骤 5 / 6 / 7 / 11 的确认闸门。
 - ❌ 禁止主 skill 亲自产出专业内容（选题诊断、写稿方向、钩子、检索聚合、文案、审稿、出图）。
 - ❌ 禁止选题 / 写稿方向 / 钩子彼此脱节或偏离用户思路与热搜词（跑题即退回重产）。
-- ❌ 禁止编造热搜词、数据、来源；未验证信息必须标注「待核实」。
+- ❌ 禁止编造热搜词、数据、来源；未验证信息必须标注「待核实」；禁止未经用户亲自确认热搜词即进入步骤 4（步骤 3 确认闸门强制），禁止遮盖或伪造来源证据链接。
 - ❌ 禁止审稿循环中主 skill 自行改稿；修改方向必须来自 dbs-resonate 报告，改稿必须经 content-deai-engine 落实。
 - ❌ 禁止交互式弹窗提问；禁止一次多问；禁止提问时输出与问题无关的信息。
 - ❌ 禁止在子 skill 介入执行时干预其决策；子 skill 的内部判断与结论为主，主 skill 仅传递信息、控制流程、接收结果（详见「职责边界 · 子 skill 决策优先」）。

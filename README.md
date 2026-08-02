@@ -17,11 +17,11 @@
 - 每次任务开始前强制完整环境检测：依赖缺失自动安装到全局 skills 目录、git 类依赖过期自动更新到上游最新、深度依赖（Playwright + Chromium）缺失自修复安装、解析路径记录到 `.deps-cache/deps.json`；主机运行时（Node.js 等）缺失自动安装到本机全局目录并自动更新。检测失败即中止，禁止跳过、禁止降级。
 - 所有向用户的提问均为纯文本：每次一个问题、编号选项、无多余输出（不使用交互式弹窗）。
 
-## 依赖（7 个）
+## 依赖（9 个）
 
 | 依赖 | 用途 | 来源 |
 |---|---|---|
-| xiaohongshu-keyword-collector | 小红书热搜词采集（浏览器自动化，免费无 API） | `openlark/skills` |
+| xhs-real-keywords | 小红书热搜词采集（浏览器自动化，免费无 API，带来源证据） | `lsuyu899-tech/xhs-real-keywords` |
 | dbs-content | 选题梳理与写稿方向诊断 | `dontbesilent2025/dbskill` |
 | dbs-hook | 钩子生成 | `dontbesilent2025/dbskill` |
 | multi-search-engine | 实证数据检索（16 引擎，无 API） | 本机已装 |
@@ -37,7 +37,7 @@
    git clone https://github.com/Keyway-tech/redbook-post-gen.git
    ```
 
-2. 安装依赖：在本仓库根目录运行 `bash ensure_deps.sh`，自动把 7 个依赖 skill 安装 / 更新到本机全局 skills 目录（`~/.workbuddy/skills/`）并记录路径到 `.deps-cache/deps.json`；首次克隆或拉取更新后建议运行一次。
+2. 安装依赖：在本仓库根目录运行 `bash ensure_deps.sh`，自动把 9 个依赖 skill 安装 / 更新到本机全局 skills 目录（`~/.workbuddy/skills/`）并记录路径到 `.deps-cache/deps.json`；首次克隆或拉取更新后建议运行一次。
 3. 在支持 skill 的 agent（如 WorkBuddy / Claude Code）中加载本目录作为 skill。
 4. 向 agent 描述你的发帖选题思路（可附配图）。主 skill 会先运行完整环境检测（依赖安装 / 更新 / 记录、主机运行时检测），再按 14 步流程驱动各依赖：缺失的关键信息（人群画像、图文贴目的）会每次一个问题向你补齐。
 5. 出图前可选择风格（Editorial Magazine × E-ink 电子杂志图文混排 / Swiss International 瑞士国际主义，及各自主题色）；配图可自备，也可由出图 skill 按流程询问后网络取图或 AI 生成。
@@ -47,7 +47,7 @@
 
 - `dbs-content` / `dbs-hook` / `dbs-resonate` 源自 dontbesilent 工具箱，版权归其原作者所有。
 - `guizang-social-card-skill`（小红书 3:4 轮播卡出图）沿用其自带 `LICENSE`（ISC）与 `COMMERCIAL_LICENSING.md`。
-- `xiaohongshu-keyword-collector`（小红书热搜词采集）源自 openlark/skills，MIT License。
+- `xhs-real-keywords`（小红书热搜词采集，带来源证据）源自 lsuyu899-tech/xhs-real-keywords，MIT License。
 - `content-deai-engine`（去 AI 味写稿）源自 lanyasheng/content-deai-engine。
 - `multi-search-engine`（多引擎检索聚合）MIT License。
 - 任何形式引用、借鉴或搬运本项目，均须注明出处 `Keyway-tech/redbook-post-gen`。

@@ -6,7 +6,7 @@
 
 | 依赖 | 用途（流程步骤） | 缺失时安装来源 |
 |---|---|---|
-| xiaohongshu-keyword-collector | 热搜词采集（步骤 3） | `openlark/skills` 子路径 `skills/xiaohongshu-keyword-collector` |
+| xhs-real-keywords | 热搜词采集（步骤 3） | `lsuyu899-tech/xhs-real-keywords` 子路径 `skills/xhs-real-keywords` |
 | dbs-content | 选题梳理与写稿方向诊断（步骤 4） | `dontbesilent2025/dbskill` 对应子路径 |
 | dbs-hook | 钩子生成（步骤 4） | `dontbesilent2025/dbskill` 对应子路径 |
 | dbs-xhs-title | 标题撰写与确认（步骤 9） | `dontbesilent2025/dbskill` 对应子路径 |
@@ -18,15 +18,16 @@
 
 ---
 
-## 1. xiaohongshu-keyword-collector（热搜词采集，步骤 3）
+## 1. xhs-real-keywords（热搜词采集，步骤 3）
 
-- **路径**：`~/.workbuddy/skills/xiaohongshu-keyword-collector/SKILL.md`
-- **职责边界**：基于浏览器自动化打开小红书探索页，输入种子词（**不提交搜索**），采集搜索框联想下拉的相关/趋势热词。纯浏览器操作，无 API Key、无调用额度、无付费层；部分词需登录态才完整，遇验证码需人工处理。**它是采集者，不写稿、不评审。**
-- **传入**：主 skill 以「选题思路 + 人群画像 + 图文贴目的」提炼的 1–3 个种子词。
-- **完整执行**：读取其 SKILL.md，遵循其 Workflow（打开 `https://www.xiaohongshu.com/explore` → 定位搜索框 → 输入种子词不提交 → 等待联想下拉 1–2 秒 → 采集全部联想词 → 去重整理输出）。不得要求它提交搜索或自由发挥；遇验证码按其规范提示用户人工处理，不得绕过。
-- **主 skill 接收**：联想词列表（单词/批量，去重后）。
-- **后续动作（主 skill 职责）**：按与选题思路的相关度筛选 **5–10 个最贴近的搜索关键词**写入信息包；不足 5 个时调整种子词再采一轮，仍不足如实记录实际数量。
-- **禁止**：主 skill 编造热词、用非小红书来源词冒充热搜词、跳过本步直接进选题环节。
+- **路径**：`~/.workbuddy/skills/xhs-real-keywords/SKILL.md`
+- **职责边界**：基于 Playwright 浏览器自动化打开小红书探索页，采集搜索框联想下拉词；若当前页无可见搜索框，自动回退到搜索结果页，抽取「大家都在搜」、筛选/细分词、Top 笔记标题与链接。每条词**带来源证据**（`evidenceUrl` / `sourceType` / `intent` / `firstSourceSeed` / `sources`）。纯浏览器操作，无 API Key、无调用额度、无付费层；默认 `--channel chrome` 复用系统 Chrome，一般免登录；遇登录墙/验证码时如实回报页面状态而非编造。**它是采集者，不写稿、不评审。**
+- **传入**：主 skill 以「选题思路 + 人群画像 + 图文贴目的」提炼的 1–3 个种子词（`--industry`）。
+- **完整执行**：读取其 SKILL.md，运行其采集脚本 `node <skill_dir>/scripts/collect-xhs-keywords.mjs --industry "<种子词>" --depth 1 --max-seeds 1 --channel chrome --headless --profile-dir .cache/xhs-profile --out-dir <临时目录>`；采集策略、去重、证据抓取由该 skill 内部决定，主 skill 不干预、仅传种子词、接收 JSON 结果。
+- **主 skill 接收**：带来源证据的关键词列表（JSON：`keywords` 数组中每条含 `keyword` / `intent` / `sourceType` / `evidenceUrl` / `firstSourceSeed` / `sources`）。
+- **用户亲自确认闸门（强制）**：见 SKILL.md 步骤 3——以「关键词 | 来源类型 | 证据链接 | 意图」确认表呈现给用户，用户未明确确认前禁止进入步骤 4。
+- **后续动作（主 skill 职责）**：按与选题思路的相关度筛选 **5–10 个最贴近的搜索关键词**写入信息包，并保留各自来源证据链接（供步骤 9 标题与步骤 10 正文自然融入、供用户核验）；不足 5 个时调整种子词再采一轮，仍不足交用户裁决（显式放行或继续重采）。
+- **禁止**：主 skill 编造热词、用非小红书来源词冒充热搜词、遮盖或伪造来源证据链接、跳过用户确认直接进入选题环节。
 
 ---
 
@@ -140,7 +141,7 @@
 | 依赖 skill | 深度依赖键 | 含义 | 校验点 |
 |---|---|---|---|
 | `guizang-social-card-skill` | `playwright` | Playwright 模块 + Chromium 二进制 | `~/.workbuddy/skills/guizang-social-card-skill/node_modules/playwright` + `chromium.executablePath()` |
-| `xiaohongshu-keyword-collector` | `playwright` | 同上（浏览器自动化采集小红书联想热词） | 同上（与 guizang 共用同一套 Playwright/Chromium） |
+| `xhs-real-keywords` | `playwright` | 浏览器自动化采集小红书联想热词 / 大家都在搜 | `~/.workbuddy/skills/xhs-real-keywords/node_modules/playwright`（与 guizang 共用同一套 Playwright/Chromium，模块优先从 guizang 复制） |
 | 其余依赖（dbs-content / dbs-hook / dbs-xhs-title / dbs-resonate / content-deai-engine / no-ai-slop / multi-search-engine） | （无） | 纯文档/检索类，无额外运行时 | — |
 
 - **新增带深度依赖的 skill 时**：必须在 `ensure_deps.sh` 的 `deep_deps_of()` 中登记其深度依赖键，并提供对应的 `check_<key>` 检查函数（含自修复安装逻辑），否则不被校验。

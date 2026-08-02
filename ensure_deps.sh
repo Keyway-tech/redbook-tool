@@ -38,7 +38,7 @@ MAX_RETRY=2             # 克隆、拉取的最大重试次数（含首次）
 # dbs 系列（dbs-content 选题与写稿方向 / dbs-hook 钩子 / dbs-xhs-title 标题 / dbs-resonate 共鸣审稿）共享同一 monorepo（dontbesilent2025/dbskill），克隆一次后按名复制子目录。
 # guizang 为独立仓库，整仓克隆（目标为 git 仓库，保留 node_modules/playwright）。
 # content-deai-engine 为独立仓库（lanyasheng/content-deai-engine），整仓克隆。
-# xiaohongshu-keyword-collector 来自 openlark/skills monorepo 子路径 skills/xiaohongshu-keyword-collector。
+# xhs-real-keywords 来自 lsuyu899-tech/xhs-real-keywords 独立仓库子路径 skills/xhs-real-keywords（monorepo 式子路径复制，采集带来源证据的实时搜索联想/大家都在搜词）。
 # multi-search-engine 为本机已装的多引擎网页检索聚合 skill（无自动 clone 来源，可选，缺失不阻塞）。
 # no-ai-slop 为独立仓库（petergyang/no-ai-slop），整仓克隆；步骤 11 去 AI 味专责。
 DEPS=(
@@ -48,7 +48,7 @@ DEPS=(
   "dbs-resonate|https://github.com/dontbesilent2025/dbskill.git"
   "guizang-social-card-skill|https://github.com/op7418/guizang-social-card-skill.git"
   "content-deai-engine|https://github.com/lanyasheng/content-deai-engine.git"
-  "xiaohongshu-keyword-collector|https://github.com/openlark/skills.git|skills/xiaohongshu-keyword-collector"
+  "xhs-real-keywords|https://github.com/lsuyu899-tech/xhs-real-keywords.git|skills/xhs-real-keywords"
   "no-ai-slop|https://github.com/petergyang/no-ai-slop.git"
   "multi-search-engine|"
 )
@@ -59,7 +59,7 @@ OPTIONAL="multi-search-engine"
 # 深度依赖映射：name -> 空格分隔的深度依赖键（见下方 check_<key> 函数）
 deep_deps_of() {
   case "$1" in
-    guizang-social-card-skill|xiaohongshu-keyword-collector) echo "playwright" ;;
+    guizang-social-card-skill|xhs-real-keywords) echo "playwright" ;;
     *) echo "" ;;
   esac
 }
@@ -289,6 +289,22 @@ check_playwright() {
       detail="$detail；Chromium 安装失败(网络 / 系统依赖 / 超时)"; ok=0
     fi
   fi
+  # 3.5) xhs-real-keywords 自有 playwright 模块（采集器从自身目录解析 playwright）
+  local xdir="$SKILLS_DIR/xhs-real-keywords"
+  if [ -d "$xdir/node_modules/playwright" ]; then
+    detail="$detail；xhs-real-keywords 自带 playwright 模块存在"
+  else
+    detail="$detail；xhs-real-keywords 缺 playwright 模块，尝试修复"; ok=0
+    [ -d "$gdir/node_modules/playwright" ] && cp -r "$gdir/node_modules/playwright" "$xdir/node_modules/playwright" 2>/dev/null && cp -r "$gdir/node_modules/playwright-core" "$xdir/node_modules/playwright-core" 2>/dev/null
+    if [ ! -d "$xdir/node_modules/playwright" ]; then
+      net_op "$PLAYWRIGHT_TIMEOUT" "npm-install:playwright-xhs" \
+        "为 xhs-real-keywords 安装 playwright 超时(${PLAYWRIGHT_TIMEOUT}s)" \
+        "检查网络；或手动 cd $xdir && npm install playwright" \
+        "cd '$xdir' && npm install --no-audit --no-fund playwright >/dev/null 2>&1" >/dev/null
+    fi
+    if [ -d "$xdir/node_modules/playwright" ]; then detail="$detail；已修复"; ok=1; else detail="$detail；修复失败(xhs playwright 模块缺失)"; ok=0; fi
+  fi
+
   # 4) 最新性（软校验，仅提示，不阻塞）：对比 npm 上游版本
   if [ -n "$ver" ]; then
     local latest=""
@@ -390,7 +406,7 @@ done
   echo "  \"_generated\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
   echo "  \"skills_dir\": \"$SKILLS_DIR\","
   echo "  \"timeout_model\": \"git 探测 ${GIT_TIMEOUT}s / 克隆 ${CLONE_TIMEOUT}s / 拉取 ${FETCH_TIMEOUT}s / npm ${NPM_TIMEOUT}s / playwright ${PLAYWRIGHT_TIMEOUT}s；克隆与拉取重试 ≤${MAX_RETRY} 次。超时即中止该调用并打印原因+修复，不无限挂起。\","
-  echo "  \"deep_dep_model\": \"每个依赖的深度依赖(如 playwright 覆盖 guizang 与 xiaohongshu-keyword-collector)在首步强制校验存在性(缺失则尝试自修复安装，失败即中止)；git 类依赖对比上游 HEAD，过期自动快进到最新；浏览器二进制最新性仅软提示。\","
+  echo "  \"deep_dep_model\": \"每个依赖的深度依赖(如 playwright 覆盖 guizang 与 xhs-real-keywords)在首步强制校验存在性(缺失则尝试自修复安装，失败即中止)；git 类依赖对比上游 HEAD，过期自动快进到最新；浏览器二进制最新性仅软提示。\","
   printf '%s' "${members[0]}"
   for ((i=1;i<${#members[@]};i++)); do printf ',\n%s' "${members[$i]}"; done
   echo ""
