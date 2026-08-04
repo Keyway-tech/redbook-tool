@@ -1,5 +1,4 @@
-# 依赖检测运行期缓存（deps.json / 基线 commit），禁止上传
-.deps-cache/
+# 依赖检测不再产生盘外缓存（已移除 .deps-cache），无需忽略项
 
 # 默认落盘产物目录（成稿/图片），禁止上传
 output/

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # redbook-post-gen 依赖环境检查脚本（增强版）
 # 职责：
-#   1) 检查并安装本机 agent skills 目录（~/.workbuddy/skills/）下的各依赖 skill；
+#   1) 检查并安装「当前 agent 的 skills 根目录」（运行时解析，不写死）下的各依赖 skill；
 #   2) 校验每个依赖的【深度依赖】（运行时前置，如浏览器自动化 Playwright+Chromium）；
 #   3) 校验每个依赖是否【最新】（git 类依赖对比上游 HEAD，过期则自动快进到最新）；
-#   4) 把解析路径、状态、commit、深度依赖结果写入 .deps-cache/deps.json。
+#   4) 仅做检查/安装/更新与深度依赖校验，不向本仓库写入任何状态文件（无 .deps-cache / deps.json）；
 # 健壮性：
 #   - 所有网络调用均受超时约束（见下方常量），超时即中止该调用并说明原因+修复方案，不无限挂起；
 #   - 克隆/拉取等可重试操作受 MAX_RETRY 计次限制，达上限仍失败则报告原因并中止；
@@ -12,12 +12,17 @@
 # 调用：bash <SKILL_REPO_DIR>/ensure_deps.sh
 set -uo pipefail
 
-SKILLS_DIR="$HOME/.workbuddy/skills"
+# skills 根目录：运行时实时解析，不写死（避免跨运行时死依赖）
+#   优先 $AGENT_SKILLS_DIR；否则取本脚本所在目录的父目录（即本 skill 被装入的 agent skills 根）
+if [ -n "${AGENT_SKILLS_DIR:-}" ]; then
+  SKILLS_DIR="$AGENT_SKILLS_DIR"
+elif [ -n "${SKILL_REPO_DIR:-}" ]; then
+  SKILLS_DIR="$(cd "$SKILL_REPO_DIR/.." && pwd)"
+else
+  SKILLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STATE_DIR="$SCRIPT_DIR/.deps-cache"
-DEPS_JSON="$STATE_DIR/deps.json"
-COMMITS_DIR="$STATE_DIR/.dep_commits"
-mkdir -p "$SKILLS_DIR" "$STATE_DIR" "$COMMITS_DIR"
+mkdir -p "$SKILLS_DIR"
 
 # ---- 超时与重试常量（秒 / 次数）----
 # 取值基准：本运行环境到 GitHub 的 git 操作实测延迟约 1–2 分钟，故 git 类超时留 3 分钟余量以允许慢连接成功完成，
@@ -32,7 +37,7 @@ MAX_RETRY=2             # 克隆、拉取的最大重试次数（含首次）
 # ---- 依赖表：name|git_url|subpath(可选) ----
 # 与 SKILL.md「环境检测」、references/dependencies.md 三处一致，改动须同步。
 # 格式说明：
-#   name|url                       -> 独立仓库，整仓克隆到 ~/.workbuddy/skills/<name>（目标为 git 仓库，可 pull 更新）
+#   name|url                       -> 独立仓库，整仓克隆到 <skills_root>/<name>（目标为 git 仓库，可 pull 更新）
 #   name|url|subpath               -> monorepo，克隆一次后复制子路径 subpath（目标非 git 仓库，更新靠重新复制）
 #   name|                          -> 无来源（本机已装），缺失时仅记 missing-optional，不自动克隆
 # dbs 系列（dbs-content 选题与写稿方向 / dbs-hook 钩子 / dbs-xhs-title 标题 / dbs-resonate 共鸣审稿）共享同一 monorepo（dontbesilent2025/dbskill），克隆一次后按名复制子目录。
@@ -40,7 +45,7 @@ MAX_RETRY=2             # 克隆、拉取的最大重试次数（含首次）
 # content-deai-engine 为独立仓库（lanyasheng/content-deai-engine），整仓克隆。
 # xhs-real-keywords 来自 lsuyu899-tech/xhs-real-keywords 独立仓库子路径 skills/xhs-real-keywords（monorepo 式子路径复制，采集带来源证据的实时搜索联想/大家都在搜词）。
 # multi-search-engine 为本机已装的多引擎网页检索聚合 skill（无自动 clone 来源，可选，缺失不阻塞）。
-# no-ai-slop 为独立仓库（petergyang/no-ai-slop），整仓克隆；步骤 11 去 AI 味专责。
+# no-ai-slop 为独立仓库（petergyang/no-ai-slop）monorepo 式子路径复制 skills/no-ai-slop；步骤 11 去 AI 味专责。
 DEPS=(
   "dbs-content|https://github.com/dontbesilent2025/dbskill.git"
   "dbs-hook|https://github.com/dontbesilent2025/dbskill.git"
@@ -49,7 +54,7 @@ DEPS=(
   "guizang-social-card-skill|https://github.com/op7418/guizang-social-card-skill.git"
   "content-deai-engine|https://github.com/lanyasheng/content-deai-engine.git"
   "xhs-real-keywords|https://github.com/lsuyu899-tech/xhs-real-keywords.git|skills/xhs-real-keywords"
-  "no-ai-slop|https://github.com/petergyang/no-ai-slop.git"
+  "no-ai-slop|https://github.com/petergyang/no-ai-slop.git|skills/no-ai-slop"
   "multi-search-engine|"
 )
 
@@ -66,9 +71,7 @@ deep_deps_of() {
 
 is_optional() { [[ " $OPTIONAL " == *" $1 "* ]]; }
 
-# 存储每依赖安装 commit（仅 copied 类需要；gitrepo 类直接读 .git）
-store_commit() { echo "$2" > "$COMMITS_DIR/$1"; }
-get_stored_commit() { [ -f "$COMMITS_DIR/$1" ] && cat "$COMMITS_DIR/$1" || echo ""; }
+# （版本基线记录已移除：不再写 .dep_commits，避免盘外落盘文件）
 
 # ---- 超时执行：run_timeout <secs> <cmdstring>
 #   返回 0=成功(标准输出到 stdout) / 2=超时 / 1=其他失败
@@ -170,13 +173,11 @@ ensure_present() {
     local src; src="$(find "$tmp" -maxdepth 6 -type d -name "$name" | head -1)"
     [ -z "$src" ] && { echo "subdir-notfound"; return; }
     cp -r "$src" "$target"
-    store_commit "$name" "$(git -C "$tmp" rev-parse HEAD)"
   elif [ -n "$subpath" ]; then
     local tmp; tmp="$(ensure_mono_tmp "$url")" || { echo "clone-fail"; return; }
     local src="$tmp/$subpath"
     [ ! -d "$src" ] && { echo "subdir-notfound"; return; }
     cp -r "$src" "$target"
-    store_commit "$name" "$(git -C "$tmp" rev-parse HEAD)"
   else
     local ok=0 rc i
     for ((i=1; i<=MAX_RETRY; i++)); do
@@ -236,23 +237,30 @@ update_dep() {
     [ -z "$src" ] && return 1
     rm -rf "$target"
     cp -r "$src" "$target"
-    store_commit "$name" "$(git -C "$tmp" rev-parse HEAD)"
   fi
 }
 
 local_commit() {
-  local name="$1" target="$2"
-  if [ -d "$target/.git" ]; then git -C "$target" rev-parse HEAD 2>/dev/null; else get_stored_commit "$name"; fi
+  local target="$2"
+  # 仅 git 类依赖可读本地 HEAD；复制式依赖（无 .git）不追踪版本，避免写盘外状态文件。
+  [ -d "$target/.git" ] && git -C "$target" rev-parse HEAD 2>/dev/null || true
 }
 
 # ============ 深度依赖检查函数 ============
 # 返回值格式： ok(0|1)|detail|version
 check_playwright() {
   local gdir="$SKILLS_DIR/guizang-social-card-skill"
+  local xdir="$SKILLS_DIR/xhs-real-keywords"
   local ok=1 detail="" ver=""
-  # 1) 模块解析
-  if [ -d "$gdir/node_modules/playwright" ]; then
+  # 1) 模块解析（guizang 与 xhs 共用同一套 Playwright，谁缺就从另一方复制 playwright 与 playwright-core）
+  if [ -d "$gdir/node_modules/playwright" ] && [ -d "$gdir/node_modules/playwright-core" ]; then
     detail="playwright 模块存在($gdir/node_modules)"
+  elif [ -d "$xdir/node_modules/playwright" ]; then
+    detail="guizang 缺 playwright 依赖，从 xhs-real-keywords 复制"; ok=0
+    mkdir -p "$gdir/node_modules"
+    cp -r "$xdir/node_modules/playwright" "$gdir/node_modules/playwright" 2>/dev/null
+    cp -r "$xdir/node_modules/playwright-core" "$gdir/node_modules/playwright-core" 2>/dev/null
+    [ -d "$gdir/node_modules/playwright" ] && [ -d "$gdir/node_modules/playwright-core" ] && { detail="已从 xhs-real-keywords 复制到 guizang"; ok=1; }
   elif node -e "require.resolve('playwright')" >/dev/null 2>&1; then
     detail="playwright 模块可全局解析"
   else
@@ -290,12 +298,14 @@ check_playwright() {
     fi
   fi
   # 3.5) xhs-real-keywords 自有 playwright 模块（采集器从自身目录解析 playwright）
-  local xdir="$SKILLS_DIR/xhs-real-keywords"
   if [ -d "$xdir/node_modules/playwright" ]; then
     detail="$detail；xhs-real-keywords 自带 playwright 模块存在"
   else
     detail="$detail；xhs-real-keywords 缺 playwright 模块，尝试修复"; ok=0
-    [ -d "$gdir/node_modules/playwright" ] && cp -r "$gdir/node_modules/playwright" "$xdir/node_modules/playwright" 2>/dev/null && cp -r "$gdir/node_modules/playwright-core" "$xdir/node_modules/playwright-core" 2>/dev/null
+    if [ -d "$gdir/node_modules/playwright" ]; then
+      mkdir -p "$xdir/node_modules"
+      cp -r "$gdir/node_modules/playwright" "$xdir/node_modules/playwright" 2>/dev/null && cp -r "$gdir/node_modules/playwright-core" "$xdir/node_modules/playwright-core" 2>/dev/null
+    fi
     if [ ! -d "$xdir/node_modules/playwright" ]; then
       net_op "$PLAYWRIGHT_TIMEOUT" "npm-install:playwright-xhs" \
         "为 xhs-real-keywords 安装 playwright 超时(${PLAYWRIGHT_TIMEOUT}s)" \
@@ -326,15 +336,8 @@ check_deepkey() {
   esac
 }
 
-# ---- JSON 记录 ----
-members=()
-record() {
-  local name="$1" path="$2" status="$3" ic="$4" lc="$5" stale="$6" deep="$7"
-  local pjson; [ -n "$path" ] && pjson="\"$path\"" || pjson="null"
-  local icj; [ -n "$ic" ] && icj="\"$ic\"" || icj="null"
-  local lcj; [ -n "$lc" ] && lcj="\"$lc\"" || lcj="null"
-  members+=("  \"$name\": {\"path\": $pjson, \"status\": \"$status\", \"installed_commit\": $icj, \"latest_commit\": $lcj, \"stale\": $stale, \"deep_deps\": $deep}")
-}
+# ---- 状态记录（已禁用：不再写 deps.json，避免产生盘外落盘文件；状态仅运行时打印）----
+record() { :; }
 
 # ---- 主流程 ----
 fails=0
@@ -349,10 +352,10 @@ for entry in "${DEPS[@]}"; do
   if [ "$status" = "present" ] || [ "$status" = "installed" ]; then
     echo "✅ 已就绪: $name ($( [ "$status" = installed ] && echo 本次安装 || echo 已存在))"
   elif [ "$status" = "missing-no-source" ]; then
-    if is_optional "$name"; then echo "⚠️ 可选依赖缺失(无来源，跳过): $name"; record "$name" "" "missing-optional" "" "" "false" "{}"; continue; fi
-    echo "❌ 依赖缺失且无来源: $name"; fails=$((fails+1)); record "$name" "" "missing-no-source" "" "" "false" "{}"; continue
+    if is_optional "$name"; then echo "⚠️ 可选依赖缺失(无来源，跳过): $name"; record "$name" "missing-optional" "" "" "false" "{}"; continue; fi
+    echo "❌ 依赖缺失且无来源: $name"; fails=$((fails+1)); record "$name" "missing-no-source" "" "" "false" "{}"; continue
   else
-    echo "❌ 依赖安装失败($status): $name"; fails=$((fails+1)); record "$name" "" "install-fail" "" "" "false" "{}"; continue
+    echo "❌ 依赖安装失败($status): $name"; fails=$((fails+1)); record "$name" "install-fail" "" "" "false" "{}"; continue
   fi
 
   # 2) 最新性（git 类依赖）
@@ -361,11 +364,9 @@ for entry in "${DEPS[@]}"; do
   [ -n "$url" ] && upstream="$(upstream_commit "$url")"
   stale="false"
   if [ -n "$url" ] && [ -n "$upstream" ] && [ -z "$local_commit_val" ]; then
-    # 本地无版本记录（非克隆方式安装 / 记录丢失）且上游可达：
-    # 记录上游 HEAD 为基线 commit（不改动任何文件），后续上游 HEAD 变更将据此触发自动更新。
-    store_commit "$name" "$upstream"
-    local_commit_val="$upstream"
-    echo "   ℹ️ $name 本地版本未知，已记录基线 commit ${upstream:0:8}（不改动文件；后续上游变更将触发自动更新）"
+    # 本地无 .git 且未记录版本基线（版本追踪已禁用，避免产生盘外状态文件）：跳过自动更新，不阻塞。
+    # 如需刷新该依赖，删除 $target 后重跑 ensure_deps.sh 即可重新拉取上游最新。
+    echo "   ℹ️ $name 本地无 git 且未记录版本基线（版本追踪已禁用，跳过自动更新；如需刷新请删除 $target 后重跑）"
   elif [ -n "$upstream" ] && [ -n "$local_commit_val" ] && [ "$upstream" != "$local_commit_val" ]; then
     stale="true"
     echo "   ↻ $name 非最新(本地 ${local_commit_val:0:8} / 上游 ${upstream:0:8})，自动更新到最新..."
@@ -397,23 +398,10 @@ for entry in "${DEPS[@]}"; do
   fi
   if [ ${#deep_frags[@]} -gt 0 ]; then deepjson="{$(IFS=,; echo "${deep_frags[*]}")}"; else deepjson="{}"; fi
 
-  record "$name" "$target" "$status" "$local_commit_val" "$upstream" "$stale" "$deepjson"
+  record "$name" "$status" "$local_commit_val" "$upstream" "$stale" "$deepjson"
 done
 
-# ---- 写出 deps.json ----
-{
-  echo "{"
-  echo "  \"_generated\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
-  echo "  \"skills_dir\": \"$SKILLS_DIR\","
-  echo "  \"timeout_model\": \"git 探测 ${GIT_TIMEOUT}s / 克隆 ${CLONE_TIMEOUT}s / 拉取 ${FETCH_TIMEOUT}s / npm ${NPM_TIMEOUT}s / playwright ${PLAYWRIGHT_TIMEOUT}s；克隆与拉取重试 ≤${MAX_RETRY} 次。超时即中止该调用并打印原因+修复，不无限挂起。\","
-  echo "  \"deep_dep_model\": \"每个依赖的深度依赖(如 playwright 覆盖 guizang 与 xhs-real-keywords)在首步强制校验存在性(缺失则尝试自修复安装，失败即中止)；git 类依赖对比上游 HEAD，过期自动快进到最新；浏览器二进制最新性仅软提示。\","
-  printf '%s' "${members[0]}"
-  for ((i=1;i<${#members[@]};i++)); do printf ',\n%s' "${members[$i]}"; done
-  echo ""
-  echo "}"
-} > "$DEPS_JSON"
-
-echo "== 依赖路径与状态已记录到 $DEPS_JSON =="
+# ---- 不再写出 deps.json（避免产生盘外落盘文件；状态仅运行时诊断打印）----
 if [ "$fails" -gt 0 ]; then
   echo "❌ 存在 $fails 项校验失败，已中止后续流程（见上方 ❌ 项）"
   exit 1
